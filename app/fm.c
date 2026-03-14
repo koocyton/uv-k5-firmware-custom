@@ -24,8 +24,10 @@
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
 #include "driver/bk1080.h"
+#include "driver/bk4819.h"
 #include "driver/eeprom.h"
 #include "driver/gpio.h"
+#include "driver/system.h"
 #include "functions.h"
 #include "misc.h"
 #include "settings.h"
@@ -105,7 +107,7 @@ void FM_TurnOff(void)
 	gFM_ScanState             = FM_SCAN_OFF;
 	gFM_RestoreCountdown_10ms = 0;
 
-	AUDIO_AudioPathOff();
+	AUDIO_AudioPathOff_FM();
 	gEnableSpeaker = false;
 
 	BK1080_Init0();
@@ -126,7 +128,7 @@ void FM_EraseChannels(void)
 
 void FM_Tune(uint16_t Frequency, int8_t Step, bool bFlag)
 {
-	AUDIO_AudioPathOff();
+	AUDIO_AudioPathOff_FM();
 
 	gEnableSpeaker = false;
 
@@ -170,7 +172,8 @@ void FM_PlayAndUpdate(void)
 	gScheduleFM           = false;
 	gAskToSave            = false;
 
-	AUDIO_AudioPathOn();
+	AUDIO_AudioPathOn_FM();
+	BK1080_Mute(false);
 
 	gEnableSpeaker   = true;
 }
@@ -562,7 +565,7 @@ void FM_Play(void)
 			if (!gEeprom.FM_IsMrMode)
 				gEeprom.FM_SelectedFrequency = gEeprom.FM_FrequencyPlaying;
 
-			AUDIO_AudioPathOn();
+			AUDIO_AudioPathOn_FM();
 			gEnableSpeaker = true;
 
 			GUI_SelectNextDisplay(DISPLAY_FM);
@@ -587,6 +590,13 @@ void FM_Play(void)
 	GUI_SelectNextDisplay(DISPLAY_FM);
 }
 
+/* Si4732 audio vs kk:
+ * - kk (SI screen): SI_init() → BK4819_Disable(), SI47XX_PowerUp(); PowerUp does
+ *   AUDIO_AudioPathOn() after 500ms then setVolume(63), no mute, then SetFreq.
+ *   kk does not set gEnableSpeaker in SI_init; path stays on until PowerDown.
+ * - kk defaults to AM (band list / last mode); this project is FM-only, default FM.
+ * - Here: AudioPathOff, BK4819_SetAF(MUTE), Init (path on inside + volume, no mute), then
+ *   gEnableSpeaker, delay, AudioPathOn(), BK1080_Mute(false). */
 void FM_Start(void)
 {
 	gDualWatchActive 		  = false;
@@ -594,12 +604,17 @@ void FM_Start(void)
 	gFM_ScanState             = FM_SCAN_OFF;
 	gFM_RestoreCountdown_10ms = 0;
 
+	AUDIO_AudioPathOff_FM();
+	BK4819_SetAF(BK4819_AF_MUTE); /* only Si4732 drives audio; kk uses BK4819_Disable() in SI_init */
 	BK1080_Init(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
+	/* Audio path is switched on inside Si4732 init; set speaker flag before delay
+	 * so nothing turns path off during the next 100ms (e.g. AUDIO_PlayQueuedVoice). */
+	gEnableSpeaker = true;
+	SYSTEM_DelayMs(100);
+	AUDIO_AudioPathOn_FM(); /* ensure path to Si4732 before unmute */
+	BK1080_Mute(false);
 
-	AUDIO_AudioPathOn();
-
-	gEnableSpeaker       = true;
-	gUpdateStatus        = true;
+	gUpdateStatus = true;
 }
 
 #endif

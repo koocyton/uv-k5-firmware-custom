@@ -7,6 +7,10 @@
 ENABLE_UART                   ?= 1
 ENABLE_AIRCOPY                ?= 0
 ENABLE_FMRADIO                ?= 1
+# FM radio chip: 0 = BK1080 (stock), 1 = Si4732 (FM only)
+ENABLE_FM_SI4732              ?= 1
+# Si4732: 1 = invert (pin low = FM), 0 = normal (pin high = FM). Try 0 then 1 if no sound.
+ENABLE_FM_SI4732_AUDIO_PATH_INVERTED ?= 0
 ENABLE_NOAA                   ?= 0
 ENABLE_VOICE                  ?= 0
 ENABLE_VOX                    ?= 1
@@ -86,7 +90,12 @@ ifeq ($(ENABLE_UART),1)
 endif
 OBJS += driver/backlight.o
 ifeq ($(ENABLE_FMRADIO),1)
+ifeq ($(ENABLE_FM_SI4732),1)
+	OBJS += driver/si473x.o
+	OBJS += driver/si4732.o
+else
 	OBJS += driver/bk1080.o
+endif
 endif
 OBJS += driver/bk4819.o
 ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART),1),1)
@@ -266,6 +275,12 @@ endif
 ifeq ($(ENABLE_FMRADIO),1)
 	CFLAGS += -DENABLE_FMRADIO
 endif
+ifeq ($(ENABLE_FM_SI4732),1)
+	CFLAGS += -DENABLE_FM_SI4732
+endif
+ifeq ($(ENABLE_FM_SI4732_AUDIO_PATH_INVERTED),1)
+	CFLAGS += -DENABLE_FM_SI4732_AUDIO_PATH_INVERTED
+endif
 ifeq ($(ENABLE_UART),1)
 	CFLAGS += -DENABLE_UART
 endif
@@ -391,7 +406,8 @@ ifeq ($(DEBUG),1)
 endif
 
 INC =
-INC += -I $(TOP)
+# Use relative path so .d files don't embed host path (fixes Docker/build from different dir)
+INC += -I .
 INC += -I $(TOP)/external/CMSIS_5/CMSIS/Core/Include/
 INC += -I $(TOP)/external/CMSIS_5/Device/ARM/ARMCM0/Include
 
