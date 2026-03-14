@@ -97,17 +97,24 @@ static bool FreqCheck(uint32_t f) {
         return f >= 6400000 && f <= 10800000;
     return f >= 500000 && f <= 30000000; /* AM 500 kHz–30 MHz */
 }
-/* K5 EEPROM base for Si473x saved freq (FM/AM/SSB); avoid clash with 0x0E88 fmCfg */
-#define SI473X_EEPROM_FREQ_BASE 0x0E8CU
+/* K5 EEPROM: FM at 0x0E8C (4 bytes); AM at 0x0E68 (2 bytes, kHz) to avoid clash with 0x0E90 */
+#define SI473X_EEPROM_FREQ_BASE  0x0E8CU
+#define SI473X_EEPROM_AM_KHZ    0x0E68U
 
 static uint32_t Read_FreqSaved(void)
 {
+    if (si4732mode == SI47XX_AM) {
+        uint16_t khz;
+        EEPROM_ReadBuffer(SI473X_EEPROM_AM_KHZ, (uint8_t *)&khz, 2);
+        if (khz < 500 || khz > 30000)
+            khz = 720;
+        return (uint32_t)khz * 1000U;
+    }
     uint32_t tmpF;
-    EEPROM_ReadBuffer(SI473X_EEPROM_FREQ_BASE + si4732mode * 4, (uint8_t *) &tmpF, 4);
+    EEPROM_ReadBuffer(SI473X_EEPROM_FREQ_BASE, (uint8_t *)&tmpF, 4);
     if (!FreqCheck(tmpF))
-        tmpF = (si4732mode == SI47XX_FM) ? 10210000 : 720000;
+        tmpF = 10210000;
     return tmpF;
-
 }
 /* Call after caller has done reset and RST_HIGH: send POWER_UP without CTS wait, 500ms, then path/volume/RDS/SetFreq. */
 void SI47XX_FirstPowerUp(uint16_t freq_10k) {

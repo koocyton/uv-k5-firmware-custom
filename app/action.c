@@ -326,6 +326,9 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
 
 #ifdef ENABLE_FMRADIO
+/* Channel when entering Radio; restored on exit so we don't jump to last channel */
+static uint8_t gFM_EnterScreenChannel[2];
+
 void ACTION_FM(void)
 {
 	if (gCurrentFunction != FUNCTION_TRANSMIT && gCurrentFunction != FUNCTION_MONITOR)
@@ -333,6 +336,13 @@ void ACTION_FM(void)
 		gInputBoxIndex = 0;
 
 		if (gFmRadioMode) {
+			/* Restore channel to what it was when we entered Radio (not CHANNEL_SAVE which may have changed) */
+			gEeprom.ScreenChannel[0] = gFM_EnterScreenChannel[0];
+			gEeprom.ScreenChannel[1] = gFM_EnterScreenChannel[1];
+			gEeprom.VfoInfo[0].CHANNEL_SAVE = gFM_EnterScreenChannel[0];
+			gEeprom.VfoInfo[1].CHANNEL_SAVE = gFM_EnterScreenChannel[1];
+			SETTINGS_SaveVfoIndices();
+			SETTINGS_SaveFM();
 			FM_TurnOff();
 			gFlagReconfigureVfos  = true;
 			gRequestDisplayScreen = DISPLAY_MAIN;
@@ -344,6 +354,10 @@ void ACTION_FM(void)
 		}
 
 		gMonitor = false;
+
+		/* Remember current channel so we can restore it when exiting Radio */
+		gFM_EnterScreenChannel[0] = gEeprom.ScreenChannel[0];
+		gFM_EnterScreenChannel[1] = gEeprom.ScreenChannel[1];
 
 		RADIO_SelectVfos();
 		RADIO_SetupRegisters(true);

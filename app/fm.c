@@ -26,6 +26,7 @@
 #include "driver/bk1080.h"
 #include "driver/bk4819.h"
 #include "driver/eeprom.h"
+#define FM_EEPROM_AM_KHZ 0x0E68U
 #ifdef ENABLE_FM_SI4732
 #include "driver/si473x.h"
 #endif
@@ -66,6 +67,23 @@ uint16_t FM_GetAM_StepKHz(void)
 bool FM_IsAMMode(void)
 {
 	return si4732mode == SI47XX_AM;
+}
+
+static void FM_SaveAMFreqToEeprom(void)
+{
+	uint8_t buf[8];
+	EEPROM_ReadBuffer(FM_EEPROM_AM_KHZ, buf, 8);
+	buf[0] = (uint8_t)(gAM_FrequencyKHz & 0xFF);
+	buf[1] = (uint8_t)(gAM_FrequencyKHz >> 8);
+	EEPROM_WriteBuffer(FM_EEPROM_AM_KHZ, buf);
+}
+
+void FM_LoadAMFrequencyFromEeprom(void)
+{
+	uint16_t khz;
+	EEPROM_ReadBuffer(FM_EEPROM_AM_KHZ, (uint8_t *)&khz, 2);
+	if (khz >= 500 && khz <= 30000)
+		gAM_FrequencyKHz = khz;
 }
 #endif
 
@@ -121,6 +139,11 @@ int FM_ConfigureChannelState(void)
 
 void FM_TurnOff(void)
 {
+#ifdef ENABLE_FM_SI4732
+	/* Persist AM frequency so next boot / switch-to-AM restores it */
+	if (si4732mode == SI47XX_AM)
+		FM_SaveAMFreqToEeprom();
+#endif
 	gFmRadioMode              = false;
 	gFM_ScanState             = FM_SCAN_OFF;
 	gFM_RestoreCountdown_10ms = 0;
@@ -299,6 +322,7 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 			if (si4732mode == SI47XX_AM) {
 				if (gInputBoxIndex > 4) {
 					gAM_FrequencyKHz = FM_AM_ParseInputFreq();
+					FM_SaveAMFreqToEeprom();
 					gInputBoxIndex = 0;
 					SI47XX_SetFreq(gAM_FrequencyKHz);
 					gUpdateStatus = true;
@@ -445,6 +469,7 @@ static void Key_EXIT(uint8_t state)
 			/* AM: EXIT with 3–5 digits commits frequency */
 			if (si4732mode == SI47XX_AM && gInputBoxIndex >= 3) {
 				gAM_FrequencyKHz = FM_AM_ParseInputFreq();
+				FM_SaveAMFreqToEeprom();
 				gInputBoxIndex = 0;
 				SI47XX_SetFreq(gAM_FrequencyKHz);
 				gUpdateStatus = true;
@@ -553,6 +578,7 @@ static void Key_UP_DOWN(uint8_t state, int8_t Step)
 		if (next < 500) next = 30000;
 		else if (next > 30000) next = 500;
 		gAM_FrequencyKHz = (uint16_t)next;
+		FM_SaveAMFreqToEeprom();
 		SI47XX_SetFreq(gAM_FrequencyKHz);
 		gRequestDisplayScreen = DISPLAY_FM;
 		gUpdateStatus = true;
@@ -642,6 +668,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 					SI47XX_SwitchMode(SI47XX_AM);
 					if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
 					if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
+					FM_SaveAMFreqToEeprom();
 					SI47XX_SetFreq(gAM_FrequencyKHz);
 				} else {
 					SI47XX_SwitchMode(SI47XX_FM);
