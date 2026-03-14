@@ -4,10 +4,11 @@
 # 1 = enable
 
 # ---- STOCK QUANSHENG FERATURES ----
-ENABLE_UART                   ?= 1
+# With ENABLE_FM_SI4732=1, flash is tight; set ENABLE_UART=1 only if you need UART.
+ENABLE_UART                   ?= 0
 ENABLE_AIRCOPY                ?= 0
 ENABLE_FMRADIO                ?= 1
-# FM radio chip: 0 = BK1080 (stock), 1 = Si4732 (FM only)
+# FM radio chip: 0 = BK1080 (stock), 1 = Si4732 (FM/AM)
 ENABLE_FM_SI4732              ?= 1
 # Si4732: 1 = invert (pin low = FM), 0 = normal (pin high = FM). Try 0 then 1 if no sound.
 ENABLE_FM_SI4732_AUDIO_PATH_INVERTED ?= 0

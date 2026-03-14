@@ -56,6 +56,20 @@ const uint8_t BITMAP_FM[10] =
 	0b01111111
 };
 
+const uint8_t BITMAP_AM[10] =
+{	// "AM"
+	0b00000000,
+	0b01111111,
+	0b00001001,
+	0b00001001,
+	0b01111111,
+	0b01111111,
+	0b00010010,
+	0b00100100,
+	0b01001000,
+	0b01111111
+};
+
 const uint8_t BITMAP_BatteryLevel[2] =
 {
 	0b01011101,

@@ -20,6 +20,9 @@
 
 #include "app/fm.h"
 #include "driver/bk1080.h"
+#ifdef ENABLE_FM_SI4732
+#include "driver/si473x.h"
+#endif
 #include "driver/st7565.h"
 #include "external/printf/printf.h"
 #include "misc.h"
@@ -35,15 +38,30 @@ void UI_DisplayFM(void)
 	char *pPrintStr = String;
 	UI_DisplayClear();
 
-	UI_PrintString("FM", 2, 0, 0, 8);
-
-	sprintf(String, "%d%s-%dM", 
-		BK1080_GetFreqLoLimit(gEeprom.FM_Band)/10,
-		gEeprom.FM_Band == 0 ? ".5" : "",
-		BK1080_GetFreqHiLimit(gEeprom.FM_Band)/10
+#ifdef ENABLE_FM_SI4732
+	if (si4732mode == SI47XX_AM) {
+		UI_PrintString("AM", 2, 0, 0, 8);
+		sprintf(String, "0.5-30M %uk", (unsigned)FM_GetAM_StepKHz());
+	} else
+#endif
+	{
+		UI_PrintString("FM", 2, 0, 0, 8);
+		sprintf(String, "%d%s-%dM",
+			BK1080_GetFreqLoLimit(gEeprom.FM_Band)/10,
+			gEeprom.FM_Band == 0 ? ".5" : "",
+			BK1080_GetFreqHiLimit(gEeprom.FM_Band)/10
 		);
-	
+	}
 	UI_PrintStringSmallNormal(String, 1, 0, 6);
+
+#ifdef ENABLE_FM_SI4732
+	/* Show RSSI/SNR at bottom-right when not in input */
+	if (gInputBoxIndex == 0) {
+		RSQ_GET();
+		sprintf(String, "R%u S%u", (unsigned)rsqStatus.resp.RSSI, (unsigned)rsqStatus.resp.SNR);
+		UI_PrintStringSmallNormal(String, 90, 0, 3);
+	}
+#endif
 
 	//uint8_t spacings[] = {20,10,5};
 	//sprintf(String, "%d0k", spacings[gEeprom.FM_Space % 3]);
@@ -54,16 +72,23 @@ void UI_DisplayFM(void)
 	} else if (gAskToDelete) {
 		pPrintStr = "DEL?";
 	} else if (gFM_ScanState == FM_SCAN_OFF) {
-		if (gEeprom.FM_IsMrMode) {
-			sprintf(String, "MR(CH%02u)", gEeprom.FM_SelectedChannel + 1);
-			pPrintStr = String;
-		} else {
-			pPrintStr = "VFO";
-			for (unsigned int i = 0; i < 20; i++) {
-				if (gEeprom.FM_FrequencyPlaying == gFM_Channels[i]) {
-					sprintf(String, "VFO(CH%02u)", i + 1);
-					pPrintStr = String;
-					break;
+#ifdef ENABLE_FM_SI4732
+		if (si4732mode == SI47XX_AM) {
+			pPrintStr = ""; /* AM: hide VFO label */
+		} else
+#endif
+		{
+			if (gEeprom.FM_IsMrMode) {
+				sprintf(String, "MR(CH%02u)", gEeprom.FM_SelectedChannel + 1);
+				pPrintStr = String;
+			} else {
+				pPrintStr = "VFO";
+				for (unsigned int i = 0; i < 20; i++) {
+					if (gEeprom.FM_FrequencyPlaying == gFM_Channels[i]) {
+						sprintf(String, "VFO(CH%02u)", i + 1);
+						pPrintStr = String;
+						break;
+					}
 				}
 			}
 		}
@@ -83,10 +108,20 @@ void UI_DisplayFM(void)
 		sprintf(String, "CH-%02u", gEeprom.FM_SelectedChannel + 1);
 	} else {
 		if (gInputBoxIndex == 0) {
-			sprintf(String, "%3d.%d", gEeprom.FM_FrequencyPlaying / 10, gEeprom.FM_FrequencyPlaying % 10);
+#ifdef ENABLE_FM_SI4732
+			if (si4732mode == SI47XX_AM)
+				sprintf(String, "%5uk", (unsigned)siCurrentFreq);
+			else
+#endif
+				sprintf(String, "%3d.%d", gEeprom.FM_FrequencyPlaying / 10, gEeprom.FM_FrequencyPlaying % 10);
 		} else {
 			const char * ascii = INPUTBOX_GetAscii();
-			sprintf(String, "%.3s.%.1s",ascii, ascii + 3);
+#ifdef ENABLE_FM_SI4732
+			if (si4732mode == SI47XX_AM)
+				sprintf(String, "%.*sk", (int)gInputBoxIndex, ascii);
+			else
+#endif
+				sprintf(String, "%.3s.%.1s", ascii, ascii + 3);
 		}
 
 		UI_DisplayFrequency(String, 36, 1, gInputBoxIndex == 0);  // frequency

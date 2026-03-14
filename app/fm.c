@@ -26,6 +26,9 @@
 #include "driver/bk1080.h"
 #include "driver/bk4819.h"
 #include "driver/eeprom.h"
+#ifdef ENABLE_FM_SI4732
+#include "driver/si473x.h"
+#endif
 #include "driver/gpio.h"
 #include "driver/system.h"
 #include "functions.h"
@@ -49,7 +52,22 @@ bool              gFM_FoundFrequency;
 bool              gFM_AutoScan;
 uint16_t          gFM_RestoreCountdown_10ms;
 
+#ifdef ENABLE_FM_SI4732
+/* AM mode: current frequency in kHz (500–30000, MW+SW). Used when si4732mode == SI47XX_AM. */
+static uint16_t gAM_FrequencyKHz = 720;
+/* AM step index: 0=1000, 1=100, 2=10, 3=1 kHz. STAR in AM cycles this. */
+static uint8_t gAM_StepIndex = 2;
 
+uint16_t FM_GetAM_StepKHz(void)
+{
+	return (gAM_StepIndex == 0) ? 1000 : (gAM_StepIndex == 1) ? 100 : (gAM_StepIndex == 2) ? 10 : 1;
+}
+
+bool FM_IsAMMode(void)
+{
+	return si4732mode == SI47XX_AM;
+}
+#endif
 
 const uint8_t BUTTON_STATE_PRESSED = 1 << 0;
 const uint8_t BUTTON_STATE_HELD = 1 << 1;
@@ -224,6 +242,22 @@ Bail:
 	return ret;
 }
 
+#ifdef ENABLE_FM_SI4732
+/* Parse AM frequency from current input digits (3–5 digits), clamp to 500–30000. */
+static uint16_t FM_AM_ParseInputFreq(void)
+{
+	uint32_t v = 0;
+	for (uint8_t i = 0; i < gInputBoxIndex && i < 5; i++) {
+		uint8_t d = (uint8_t)gInputBox[i];
+		if (d > 9) break;
+		v = v * 10 + d;
+	}
+	if (v < 500) v = 500;
+	if (v > 30000) v = 30000;
+	return (uint16_t)v;
+}
+#endif
+
 static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 {
 	enum { STATE_FREQ_MODE, STATE_MR_MODE, STATE_SAVE };
@@ -248,11 +282,31 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 			State = gEeprom.FM_IsMrMode ? STATE_MR_MODE : STATE_FREQ_MODE;
 		}
 
+#ifdef ENABLE_FM_SI4732
+		if (State == STATE_FREQ_MODE && si4732mode == SI47XX_AM && gInputBoxIndex >= 5) {
+			gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+			gRequestDisplayScreen = DISPLAY_FM;
+			return;
+		}
+#endif
 		INPUTBOX_Append(Key);
 
 		gRequestDisplayScreen = DISPLAY_FM;
 
 		if (State == STATE_FREQ_MODE) {
+#ifdef ENABLE_FM_SI4732
+			/* AM: 3–5 digits; commit when 5 digits or EXIT. No FM first-digit rule. */
+			if (si4732mode == SI47XX_AM) {
+				if (gInputBoxIndex > 4) {
+					gAM_FrequencyKHz = FM_AM_ParseInputFreq();
+					gInputBoxIndex = 0;
+					SI47XX_SetFreq(gAM_FrequencyKHz);
+					gUpdateStatus = true;
+				}
+				return;
+			}
+#endif
+			/* FM: first digit must be 0 or 1 (87–108) */
 			if (gInputBoxIndex == 1) {
 				if (gInputBox[0] > 1) {
 					gInputBox[1] = gInputBox[0];
@@ -387,6 +441,17 @@ static void Key_EXIT(uint8_t state)
 			gAskToDelete = false;
 		}
 		else {
+#ifdef ENABLE_FM_SI4732
+			/* AM: EXIT with 3–5 digits commits frequency */
+			if (si4732mode == SI47XX_AM && gInputBoxIndex >= 3) {
+				gAM_FrequencyKHz = FM_AM_ParseInputFreq();
+				gInputBoxIndex = 0;
+				SI47XX_SetFreq(gAM_FrequencyKHz);
+				gUpdateStatus = true;
+				gRequestDisplayScreen = DISPLAY_FM;
+				return;
+			}
+#endif
 			gInputBox[--gInputBoxIndex] = 10;
 
 			if (gInputBoxIndex) {
@@ -480,6 +545,21 @@ static void Key_UP_DOWN(uint8_t state, int8_t Step)
 		return;
 	}
 
+#ifdef ENABLE_FM_SI4732
+	/* AM mode: step 1000/100/10/1 kHz (STAR cycles), 500–30000 kHz */
+	if (si4732mode == SI47XX_AM) {
+		uint16_t step = (gAM_StepIndex == 0) ? 1000 : (gAM_StepIndex == 1) ? 100 : (gAM_StepIndex == 2) ? 10 : 1;
+		int32_t next = (int32_t)gAM_FrequencyKHz + (int32_t)Step * (int32_t)step;
+		if (next < 500) next = 30000;
+		else if (next > 30000) next = 500;
+		gAM_FrequencyKHz = (uint16_t)next;
+		SI47XX_SetFreq(gAM_FrequencyKHz);
+		gRequestDisplayScreen = DISPLAY_FM;
+		gUpdateStatus = true;
+		return;
+	}
+#endif
+
 	if (gFM_ScanState != FM_SCAN_OFF) {
 		if (gFM_AutoScan) {
 			gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
@@ -528,6 +608,14 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			Key_DIGITS(Key, state);
 			break;
 		case KEY_STAR:
+#ifdef ENABLE_FM_SI4732
+			if (si4732mode == SI47XX_AM && gInputBoxIndex == 0 && state == BUTTON_EVENT_SHORT) {
+				gAM_StepIndex = (gAM_StepIndex + 1) & 3; /* 0→1→2→3→0: 1000,100,10,1 */
+				gUpdateStatus = true;
+				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
+				break;
+			}
+#endif
 			Key_FUNC(Key, state);
 			break;
 		case KEY_MENU:
@@ -543,8 +631,29 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			Key_EXIT(state);
 			break;
 		case KEY_F:
+#ifdef ENABLE_FM_SI4732
+			if (bKeyHeld) {
+				GENERIC_Key_F(bKeyPressed, bKeyHeld);
+				break;
+			}
+			if (bKeyPressed) {
+				/* Short press: toggle FM <-> AM */
+				if (si4732mode == SI47XX_FM) {
+					SI47XX_SwitchMode(SI47XX_AM);
+					if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
+					if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
+					SI47XX_SetFreq(gAM_FrequencyKHz);
+				} else {
+					SI47XX_SwitchMode(SI47XX_FM);
+					SI47XX_SetFreq((uint16_t)((unsigned long)gEeprom.FM_FrequencyPlaying * 10U));
+				}
+				gUpdateStatus = true;
+			}
+			break;
+#else
 			GENERIC_Key_F(bKeyPressed, bKeyHeld);
 			break;
+#endif
 		case KEY_PTT:
 			GENERIC_Key_PTT(bKeyPressed);
 			break;

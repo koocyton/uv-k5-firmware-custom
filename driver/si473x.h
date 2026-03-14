@@ -551,35 +551,19 @@ typedef union {
   uint8_t raw[2];
 } SI47XX_BW_Config; // AM_CHANNEL_FILTER
 
-void SI47XX_FirstPowerUp(uint16_t freq_10k); /* Cold boot: no CTS wait before POWER_UP; FM only. */
+void SI47XX_FirstPowerUp(uint16_t freq_10k);
 void SI47XX_Mute(bool mute);
-void SI47XX_PowerUp();
-void SI47XX_PowerDown();
+void SI47XX_PowerUp(void);
+void SI47XX_PowerDown(void);
 void SI47XX_SetFreq(uint16_t freq);
-void SI47XX_ReadRDS(uint8_t buf[13]);
 void SI47XX_SwitchMode(SI47XX_MODE mode);
-bool SI47XX_IsSSB();
-void RSQ_GET();
+void RSQ_GET(void);
 void SI47XX_SetAutomaticGainControl(uint8_t AGCDIS, uint8_t AGCIDX);
-void SI47XX_Seek(bool up, bool wrap);
-uint16_t SI47XX_getFrequency(bool *valid);
-void SI47XX_SetBandwidth(SI47XX_FilterBW AMCHFLT, bool AMPLFLT);
-void SI47XX_SetSsbBandwidth(SI47XX_SsbFilterBW bw);
 void SI47XX_SetSeekFmLimits(uint16_t bottom, uint16_t top);
 void SI47XX_SetSeekAmLimits(uint16_t bottom, uint16_t top);
-void SI47XX_SetSeekFmSpacing(uint16_t spacing);
-void SI47XX_SetSeekAmSpacing(uint16_t spacing);
-void SI47XX_SetSeekFmRssiThreshold(uint16_t value);
-void SI47XX_SetSeekAmRssiThreshold(uint16_t value);
-void SI47XX_SetBFO(int16_t bfo);
-void SI47XX_SetSsbCapacitor(uint16_t v);
-uint32_t Read_FreqSaved();
-        bool FreqCheck(uint32_t f) ;
 extern SI47XX_MODE si4732mode;
 extern RSQStatus rsqStatus;
 extern uint16_t siCurrentFreq;
-extern uint16_t divider ;
-
-#define PATCH_SIZE 15832
+extern uint16_t divider;
 
 #endif /* end of include guard: SI473X_H */
