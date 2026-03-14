@@ -55,11 +55,11 @@ void UI_DisplayFM(void)
 	UI_PrintStringSmallNormal(String, 1, 0, 6);
 
 #ifdef ENABLE_FM_SI4732
-	/* Show RSSI/SNR at bottom-right when not in input */
+	/* RSSI/SNR on same line as step (line 6), far right; format "RSSI/SNR" */
 	if (gInputBoxIndex == 0) {
 		RSQ_GET();
-		sprintf(String, "R%u S%u", (unsigned)rsqStatus.resp.RSSI, (unsigned)rsqStatus.resp.SNR);
-		UI_PrintStringSmallNormal(String, 90, 0, 3);
+		sprintf(String, "%u/%u", (unsigned)rsqStatus.resp.RSSI, (unsigned)rsqStatus.resp.SNR);
+		UI_PrintStringSmallNormal(String, 95, 0, 6);
 	}
 #endif
 
