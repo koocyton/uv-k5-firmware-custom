@@ -655,7 +655,9 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			break;
 #endif
 		case KEY_PTT:
-			GENERIC_Key_PTT(bKeyPressed);
+			/* In Radio mode, PTT = EXIT (e.g. exit FM screen, clear input) */
+			if (bKeyPressed)
+				Key_EXIT(BUTTON_EVENT_SHORT);
 			break;
 		default:
 			if (!bKeyHeld && bKeyPressed)
