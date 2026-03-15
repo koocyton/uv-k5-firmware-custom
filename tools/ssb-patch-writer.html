@@ -158,7 +158,7 @@
             if ((i / CHUNK_PAYLOAD) % 20 === 0 && i > 0) log('已写 ' + i + ' / ' + toWrite.length + ' 字节');
           }
           writer.releaseLock();
-          log('写入完成。请重启对讲机后进入 AM 波段用长按 0 切换 LSB/USB/CW 测试。', false);
+          log('写入完成。请重启对讲机：F+0 进 Radio，FM/AM 下长按 F 进单边带，单边带下短按 F 切换 USB/LSB/CW，长按 F 退回 AM。', false);
         } catch (e) {
           log('写入失败: ' + e.message, true);
         }
