@@ -559,6 +559,9 @@ void SI47XX_SetFreq(uint16_t freq);
 void SI47XX_SwitchMode(SI47XX_MODE mode);
 bool SI47XX_IsAMFamily(void); /* true if AM, LSB, USB, or CW */
 bool SI47XX_IsSSB(void);     /* true if LSB or USB (patch mode) */
+void SI47XX_ApplyAmAntennaInput(void);   /* 按当前选择设置 PROP_FM_ANTENNA_INPUT */
+void SI47XX_ToggleAmAntennaFMI(void);    /* 切换 FMI/AMI 并立即生效 */
+bool SI47XX_GetAmAntennaFMI(void);      /* true=FMI, false=AMI */
 void RSQ_GET(void);
 void SI47XX_SetAutomaticGainControl(uint8_t AGCDIS, uint8_t AGCIDX);
 void SI47XX_SetSeekFmLimits(uint16_t bottom, uint16_t top);

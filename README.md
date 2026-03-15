@@ -118,6 +118,15 @@ If the patch is missing or the EEPROM is too small, the UI will still switch to 
 
 **校验：** 写入后重启对讲机，进 AM 波段按 **3** 切到 LSB/USB，若声音解调正常，说明补丁已生效。
 
+### AM/单边带使用 FMI 天线（实验性）
+
+Si4732 有两个天线输入：**AMI**（AM/LW）、**FMI**（FM/SW）。官方仅文档化了 **PROP_FM_ANTENNA_INPUT (0x1107)** 用于 FM 时选择 FMI/AMI，**未明确** AM/SSB 是否可由软件切到 FMI。若你希望 AM 或单边带从 **FMI** 取信号（例如 FMI 接了更好的短波天线），可编译时打开实验选项：
+
+- **Makefile** 中设 **`ENABLE_SI4732_AM_USE_FMI=1`**，重新编译、烧录。
+- 固件会在进入 AM 和 SSB 时设置 `PROP_FM_ANTENNA_INPUT = 0`（通常对应 FMI）。若无效或更差，可改 `si473x.c` 里该值为 `1` 再试，或关闭本选项。
+
+**注意：** 若芯片内部 AM/SW 只接 AMI，此选项可能无效果；若有效，则 AM/SSB 会从 FMI 取信号。
+
 ## 2Mbit (256KB) EEPROM 识别
 
 若你已把机器换成 **2Mbit EEPROM**，希望电脑 CPS 显示为 2Mbit 而不是 64Kbit：

@@ -641,22 +641,6 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 	uint8_t state = bKeyPressed + 2 * bKeyHeld;
 
 	switch (Key) {
-		case KEY_3:
-#ifdef ENABLE_FM_SI4732
-			/* AM 波段：仅短按 3 切换 AM→LSB→USB→CW（长按不重复切，避免切回无声 AM） */
-			if (SI47XX_IsAMFamily() && gInputBoxIndex == 0 && state == BUTTON_EVENT_SHORT) {
-				SI47XX_MODE next = (si4732mode == SI47XX_AM) ? SI47XX_LSB :
-					(si4732mode == SI47XX_LSB) ? SI47XX_USB :
-					(si4732mode == SI47XX_USB) ? SI47XX_CW : SI47XX_AM;
-				SI47XX_SwitchMode(next);
-				SI47XX_SetFreq(gAM_FrequencyKHz);
-				gUpdateStatus = true;
-				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
-				break;
-			}
-#endif
-			Key_DIGITS(Key, state);
-			break;
 		case KEY_0:
 #ifdef ENABLE_FM_SI4732
 			/* AM 波段：长按 0 在 LSB/USB/CW 间切换 */
@@ -673,7 +657,20 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 #endif
 			Key_DIGITS(Key, state);
 			break;
-		case KEY_1: case KEY_2: case KEY_4: case KEY_5: case KEY_6: case KEY_7: case KEY_8: case KEY_9:
+		case KEY_9:
+#ifdef ENABLE_FM_SI4732
+			/* AM 波段：长按 9 切换 FMI / AMI 天线输入 */
+			if (SI47XX_IsAMFamily() && gInputBoxIndex == 0 && state == BUTTON_EVENT_HELD) {
+				SI47XX_ToggleAmAntennaFMI();
+				SI47XX_SetFreq(gAM_FrequencyKHz);
+				gUpdateStatus = true;
+				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
+				break;
+			}
+#endif
+			Key_DIGITS(Key, state);
+			break;
+		case KEY_1: case KEY_2: case KEY_3: case KEY_4: case KEY_5: case KEY_6: case KEY_7: case KEY_8:
 			Key_DIGITS(Key, state);
 			break;
 		case KEY_STAR:

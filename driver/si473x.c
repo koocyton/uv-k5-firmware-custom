@@ -25,6 +25,13 @@ SI47XX_MODE si4732mode = SI47XX_FM;
 static bool isAmFamilyStatic(void);
 uint16_t siCurrentFreq = 10210;
 
+/* AM/SSB 天线选择：false=AMI, true=FMI。长按 9 切换，上电时按此值设置 PROP_FM_ANTENNA_INPUT */
+#ifdef ENABLE_SI4732_AM_USE_FMI
+static bool gAmUseFMI = true;  /* 编译选项默认 FMI */
+#else
+static bool gAmUseFMI = false; /* 默认 AMI */
+#endif
+
 void SI47XX_ReadBuffer(uint8_t *buf, uint8_t size) {
   I2C_Start();
   I2C_Write(SI47XX_I2C_ADDR + 1);
@@ -55,6 +62,19 @@ static void sendProperty(uint16_t prop, uint16_t parameter) {
                     (uint8_t)(parameter >> 8), (uint8_t)(parameter & 0xff)};
   SI47XX_WriteBuffer(tmp, 6);
   SYSTEM_DelayMs(2);
+}
+
+void SI47XX_ApplyAmAntennaInput(void) {
+  sendProperty(PROP_FM_ANTENNA_INPUT, gAmUseFMI ? 0U : 1U); /* 0=FMI, 1=AMI */
+}
+
+void SI47XX_ToggleAmAntennaFMI(void) {
+  gAmUseFMI = !gAmUseFMI;
+  SI47XX_ApplyAmAntennaInput();
+}
+
+bool SI47XX_GetAmAntennaFMI(void) {
+  return gAmUseFMI;
 }
 
 void RSQ_GET() {
@@ -169,7 +189,8 @@ void SI47XX_PowerUp() {
   if (si4732mode == SI47XX_FM) {
     enableRDS();
   } else if (isAmFamilyStatic()) {
-    /* AM / LSB / USB / CW */
+    /* AM / LSB / USB / CW：按当前天线选择设置（长按 9 可切换 FMI/AMI） */
+    SI47XX_ApplyAmAntennaInput();
     SI47XX_SetAutomaticGainControl(1, 0);
     sendProperty(PROP_AM_SOFT_MUTE_MAX_ATTENUATION, 0);
     sendProperty(PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN, 0x7800);
@@ -210,6 +231,7 @@ static void SI47XX_PatchPowerUp(void) {
   SYSTEM_DelayMs(550);
 
   SI47XX_downloadPatch();
+  SI47XX_ApplyAmAntennaInput(); /* 单边带也按当前 FMI/AMI 选择 */
   /* AUDIOBW: 0=1.2k 1=2.2k 2=3k 3=4k；收窄带宽降噪，2.2k 兼顾语音与噪声 */
   SI47XX_SsbSetup(1, 2, 0, 1, 0, 1); /* AUDIOBW=2.2kHz, SBCUTFLT=2, AVC=1, DSP_AFCDIS=1 */
 

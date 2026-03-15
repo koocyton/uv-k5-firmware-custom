@@ -12,6 +12,8 @@ ENABLE_FMRADIO                ?= 1
 ENABLE_FM_SI4732              ?= 1
 # Si4732: 1 = invert (pin low = FM), 0 = normal (pin high = FM). Try 0 then 1 if no sound.
 ENABLE_FM_SI4732_AUDIO_PATH_INVERTED ?= 0
+# Si4732 AM/SSB 使用 FMI 天线输入：1=尝试设置 PROP_FM_ANTENNA_INPUT（实验性，部分芯片可能有效）
+ENABLE_SI4732_AM_USE_FMI             ?= 0
 # 2Mbit EEPROM: 1=report 256KB to CPS (version "HS" + Padding hint). 0=report 64Kbit.
 ENABLE_2MBIT_EEPROM           ?= 1
 ENABLE_NOAA                   ?= 0
@@ -283,6 +285,9 @@ ifeq ($(ENABLE_FM_SI4732),1)
 endif
 ifeq ($(ENABLE_FM_SI4732_AUDIO_PATH_INVERTED),1)
 	CFLAGS += -DENABLE_FM_SI4732_AUDIO_PATH_INVERTED
+endif
+ifeq ($(ENABLE_SI4732_AM_USE_FMI),1)
+	CFLAGS += -DENABLE_SI4732_AM_USE_FMI
 endif
 ifeq ($(ENABLE_2MBIT_EEPROM),1)
 	CFLAGS += -DENABLE_2MBIT_EEPROM
