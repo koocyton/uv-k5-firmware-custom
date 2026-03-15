@@ -657,20 +657,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 #endif
 			Key_DIGITS(Key, state);
 			break;
-		case KEY_9:
-#ifdef ENABLE_FM_SI4732
-			/* AM 波段：长按 9 切换 FMI / AMI 天线输入 */
-			if (SI47XX_IsAMFamily() && gInputBoxIndex == 0 && state == BUTTON_EVENT_HELD) {
-				SI47XX_ToggleAmAntennaFMI();
-				SI47XX_SetFreq(gAM_FrequencyKHz);
-				gUpdateStatus = true;
-				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
-				break;
-			}
-#endif
-			Key_DIGITS(Key, state);
-			break;
-		case KEY_1: case KEY_2: case KEY_3: case KEY_4: case KEY_5: case KEY_6: case KEY_7: case KEY_8:
+		case KEY_1: case KEY_2: case KEY_3: case KEY_4: case KEY_5: case KEY_6: case KEY_7: case KEY_8: case KEY_9:
 			Key_DIGITS(Key, state);
 			break;
 		case KEY_STAR:

@@ -42,7 +42,7 @@ void UI_DisplayFM(void)
 	if (SI47XX_IsAMFamily()) {
 		const char *mod = (si4732mode == SI47XX_AM) ? "AM" : (si4732mode == SI47XX_LSB) ? "LSB" : (si4732mode == SI47XX_USB) ? "USB" : "CW";
 		UI_PrintString(mod, 2, 0, 0, 8);
-		sprintf(String, "0.5-30M %uk %s", (unsigned)FM_GetAM_StepKHz(), SI47XX_GetAmAntennaFMI() ? "FMI" : "AMI");
+		sprintf(String, "0.5-30M %uk", (unsigned)FM_GetAM_StepKHz());
 	} else
 #endif
 	{
