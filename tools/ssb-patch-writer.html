@@ -123,11 +123,7 @@
         try {
           port = await navigator.serial.requestPort();
           await port.open({ baudRate: 115200 });
-          const writer = port.writable.getWriter();
-          log('串口已打开，发送 0x0514 获取会话…');
-          await cmd0514(writer);
-          writer.releaseLock();
-          log('请在对讲机进入“写频/编程”模式后再点“写入”。若已就绪可直接点“写入 0x3C228”。', false);
+          log('串口已打开（未发送数据，不会触发 TX）。请在对讲机进入“写频/编程”模式后再点“写入 0x3C228”。', false);
           btnConnect.textContent = '已连接';
           btnConnect.disabled = true;
         } catch (e) {
@@ -149,6 +145,8 @@
         try {
           await port.open({ baudRate: 115200 }).catch(() => {});
           const writer = port.writable.getWriter();
+          log('发送 0x0514 获取会话…');
+          await cmd0514(writer);
           let addr = SSB_EEPROM_ADDR;
           for (let i = 0; i < toWrite.length; i += CHUNK_PAYLOAD) {
             const chunk = toWrite.subarray(i, Math.min(i + CHUNK_PAYLOAD, toWrite.length));
