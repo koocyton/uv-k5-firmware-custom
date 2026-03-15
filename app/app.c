@@ -1058,10 +1058,16 @@ static void CheckKeys(void)
 		return;
 	}
 
-	if (gDebounceCounter < key_repeat_delay_10ms || Key == KEY_INVALID) // the button is not held long enough for repeat yet, or not really pressed
+	/* Radio 下 F 键长按判定时间延长一倍（400ms -> 800ms），其它键仍用 key_repeat_delay_10ms */
+	uint16_t hold_threshold_10ms = key_repeat_delay_10ms;
+#ifdef ENABLE_FMRADIO
+	if (gScreenToDisplay == DISPLAY_FM && Key == KEY_F)
+		hold_threshold_10ms = key_repeat_delay_10ms * 2;
+#endif
+	if (gDebounceCounter < hold_threshold_10ms || Key == KEY_INVALID) // the button is not held long enough for repeat yet, or not really pressed
 		return;
 
-	if (gDebounceCounter == key_repeat_delay_10ms) //initial key repeat with longer delay
+	if (gDebounceCounter == hold_threshold_10ms) //initial key repeat with longer delay
 	{
 		if (Key != KEY_PTT)
 		{

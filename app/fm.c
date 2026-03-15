@@ -58,6 +58,10 @@ uint16_t          gFM_RestoreCountdown_10ms;
 static uint16_t gAM_FrequencyKHz = 720;
 /* AM step index: 0=1000, 1=100, 2=10, 3=1 kHz. STAR in AM cycles this. */
 static uint8_t gAM_StepIndex = 3;  /* 0=1000k 1=100k 2=10k 3=1k，默认 1k */
+/* 长按 F 刚进入单边带时置位，松键清除；避免同一长按的后续 held 事件立刻触发“退回 AM” */
+static bool gFKeyJustEnteredSSB = false;
+/* 本次 F 键已触发长按，松键前不再触发短按；松键时清除 */
+static bool gFKeyLongPressDone = false;
 
 uint16_t FM_GetAM_StepKHz(void)
 {
@@ -412,7 +416,9 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
 
 		switch (Key) {
 			case KEY_0:
-				ACTION_FM();
+				/* 仅短按 0 退出 Radio；长按 0 与其它数字键一致，无动作 */
+				if (state == BUTTON_EVENT_SHORT)
+					ACTION_FM();
 				break;
 
 			case KEY_1:
@@ -672,51 +678,57 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			break;
 		case KEY_F:
 #ifdef ENABLE_FM_SI4732
-			if (bKeyHeld) {
-				/* 长按 F */
-				if (si4732mode == SI47XX_LSB || si4732mode == SI47XX_USB || si4732mode == SI47XX_CW) {
-					/* 单边带时：长按 F 退回 AM */
-					SI47XX_SwitchMode(SI47XX_AM);
-					SI47XX_SetFreq(gAM_FrequencyKHz);
-					gUpdateStatus = true;
+			if (!bKeyPressed) {
+				/* 松键：若本次未触发长按，则视为短按（按下立即松开） */
+				if (!gFKeyLongPressDone) {
+					if (si4732mode == SI47XX_FM) {
+						SI47XX_SwitchMode(SI47XX_AM);
+						if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
+						if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
+						FM_SaveAMFreqToEeprom();
+						SI47XX_SetFreq(gAM_FrequencyKHz);
+						gUpdateStatus = true;
+					} else if (si4732mode == SI47XX_AM) {
+						SI47XX_SwitchMode(SI47XX_FM);
+						SI47XX_SetFreq((uint16_t)((unsigned long)gEeprom.FM_FrequencyPlaying * 10U));
+						gUpdateStatus = true;
+					} else if (si4732mode == SI47XX_LSB || si4732mode == SI47XX_USB || si4732mode == SI47XX_CW) {
+						SI47XX_MODE next = (si4732mode == SI47XX_USB) ? SI47XX_LSB :
+							(si4732mode == SI47XX_LSB) ? SI47XX_CW : SI47XX_USB;
+						SI47XX_SwitchMode(next);
+						SI47XX_SetFreq(gAM_FrequencyKHz);
+						gUpdateStatus = true;
+					}
 					gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
-				} else if (si4732mode == SI47XX_FM || si4732mode == SI47XX_AM) {
-					/* FM/AM 时：长按 F 进入单边带 USB */
-					if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
-					if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
-					FM_SaveAMFreqToEeprom();
-					SI47XX_SwitchMode(SI47XX_USB);
-					SI47XX_SetFreq(gAM_FrequencyKHz);
-					gUpdateStatus = true;
-					gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
-				} else {
-					GENERIC_Key_F(bKeyPressed, bKeyHeld);
 				}
-			} else if (bKeyPressed) {
-				/* 短按 F */
-				if (si4732mode == SI47XX_FM) {
-					/* FM 时：短按 F → AM */
-					SI47XX_SwitchMode(SI47XX_AM);
-					if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
-					if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
-					FM_SaveAMFreqToEeprom();
-					SI47XX_SetFreq(gAM_FrequencyKHz);
-					gUpdateStatus = true;
-				} else if (si4732mode == SI47XX_AM) {
-					/* AM 时：短按 F → FM */
-					SI47XX_SwitchMode(SI47XX_FM);
-					SI47XX_SetFreq((uint16_t)((unsigned long)gEeprom.FM_FrequencyPlaying * 10U));
-					gUpdateStatus = true;
-				} else if (si4732mode == SI47XX_LSB || si4732mode == SI47XX_USB || si4732mode == SI47XX_CW) {
-					/* 单边带时：短按 F 切换 USB / LSB / CW */
-					SI47XX_MODE next = (si4732mode == SI47XX_USB) ? SI47XX_LSB :
-						(si4732mode == SI47XX_LSB) ? SI47XX_CW : SI47XX_USB;
-					SI47XX_SwitchMode(next);
-					SI47XX_SetFreq(gAM_FrequencyKHz);
-					gUpdateStatus = true;
+				gFKeyJustEnteredSSB = false;
+				gFKeyLongPressDone = false;
+			} else if (bKeyHeld) {
+				/* 长按：达到长按标准后只触发一次，同一按下期间不再重复 */
+				if (!gFKeyLongPressDone) {
+					if (si4732mode == SI47XX_LSB || si4732mode == SI47XX_USB || si4732mode == SI47XX_CW) {
+						if (!gFKeyJustEnteredSSB) {
+							SI47XX_SwitchMode(SI47XX_AM);
+							SI47XX_SetFreq(gAM_FrequencyKHz);
+							gUpdateStatus = true;
+							gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
+						}
+					} else if (si4732mode == SI47XX_FM || si4732mode == SI47XX_AM) {
+						if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
+						if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
+						FM_SaveAMFreqToEeprom();
+						SI47XX_SwitchMode(SI47XX_USB);
+						SI47XX_SetFreq(gAM_FrequencyKHz);
+						gUpdateStatus = true;
+						gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
+						gFKeyJustEnteredSSB = true;
+					} else {
+						GENERIC_Key_F(bKeyPressed, bKeyHeld);
+					}
+					gFKeyLongPressDone = true;
 				}
-				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 			}
+			/* 仅按下未达长按时不处理，等松键再判短按 */
 			break;
 #else
 			GENERIC_Key_F(bKeyPressed, bKeyHeld);
