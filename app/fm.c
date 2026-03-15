@@ -66,7 +66,7 @@ uint16_t FM_GetAM_StepKHz(void)
 
 bool FM_IsAMMode(void)
 {
-	return si4732mode == SI47XX_AM;
+	return SI47XX_IsAMFamily();
 }
 
 static void FM_SaveAMFreqToEeprom(void)
@@ -141,7 +141,7 @@ void FM_TurnOff(void)
 {
 #ifdef ENABLE_FM_SI4732
 	/* Persist AM frequency so next boot / switch-to-AM restores it */
-	if (si4732mode == SI47XX_AM)
+	if (SI47XX_IsAMFamily())
 		FM_SaveAMFreqToEeprom();
 #endif
 	gFmRadioMode              = false;
@@ -306,7 +306,7 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 		}
 
 #ifdef ENABLE_FM_SI4732
-		if (State == STATE_FREQ_MODE && si4732mode == SI47XX_AM && gInputBoxIndex >= 5) {
+		if (State == STATE_FREQ_MODE && SI47XX_IsAMFamily() && gInputBoxIndex >= 5) {
 			gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
 			gRequestDisplayScreen = DISPLAY_FM;
 			return;
@@ -319,7 +319,7 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 		if (State == STATE_FREQ_MODE) {
 #ifdef ENABLE_FM_SI4732
 			/* AM: 3–5 digits; commit when 5 digits or EXIT. No FM first-digit rule. */
-			if (si4732mode == SI47XX_AM) {
+			if (SI47XX_IsAMFamily()) {
 				if (gInputBoxIndex > 4) {
 					gAM_FrequencyKHz = FM_AM_ParseInputFreq();
 					FM_SaveAMFreqToEeprom();
@@ -426,8 +426,19 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
 			// 	break;
 
 			case KEY_3:
+#ifdef ENABLE_FM_SI4732
+				/* In AM band: cycle AM → LSB → USB → CW → AM; driver loads patch when entering LSB/USB */
+				if (SI47XX_IsAMFamily()) {
+					SI47XX_MODE next = (si4732mode == SI47XX_AM) ? SI47XX_LSB :
+						(si4732mode == SI47XX_LSB) ? SI47XX_USB :
+						(si4732mode == SI47XX_USB) ? SI47XX_CW : SI47XX_AM;
+					SI47XX_SwitchMode(next);
+					SI47XX_SetFreq(gAM_FrequencyKHz);
+					gUpdateStatus = true;
+					break;
+				}
+#endif
 				gEeprom.FM_IsMrMode = !gEeprom.FM_IsMrMode;
-
 				if (!FM_ConfigureChannelState()) {
 					BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
 					gRequestSaveFM = true;
@@ -467,7 +478,7 @@ static void Key_EXIT(uint8_t state)
 		else {
 #ifdef ENABLE_FM_SI4732
 			/* AM: EXIT with 3–5 digits commits frequency */
-			if (si4732mode == SI47XX_AM && gInputBoxIndex >= 3) {
+			if (SI47XX_IsAMFamily() && gInputBoxIndex >= 3) {
 				gAM_FrequencyKHz = FM_AM_ParseInputFreq();
 				FM_SaveAMFreqToEeprom();
 				gInputBoxIndex = 0;
@@ -572,7 +583,7 @@ static void Key_UP_DOWN(uint8_t state, int8_t Step)
 
 #ifdef ENABLE_FM_SI4732
 	/* AM mode: step 1000/100/10/1 kHz (STAR cycles), 500–30000 kHz */
-	if (si4732mode == SI47XX_AM) {
+	if (SI47XX_IsAMFamily()) {
 		uint16_t step = (gAM_StepIndex == 0) ? 1000 : (gAM_StepIndex == 1) ? 100 : (gAM_StepIndex == 2) ? 10 : 1;
 		int32_t next = (int32_t)gAM_FrequencyKHz + (int32_t)Step * (int32_t)step;
 		if (next < 500) next = 30000;
@@ -635,7 +646,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			break;
 		case KEY_STAR:
 #ifdef ENABLE_FM_SI4732
-			if (si4732mode == SI47XX_AM && gInputBoxIndex == 0 && state == BUTTON_EVENT_SHORT) {
+			if (SI47XX_IsAMFamily() && gInputBoxIndex == 0 && state == BUTTON_EVENT_SHORT) {
 				gAM_StepIndex = (gAM_StepIndex + 1) & 3; /* 0→1→2→3→0: 1000,100,10,1 */
 				gUpdateStatus = true;
 				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;

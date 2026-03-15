@@ -70,11 +70,11 @@ void BK1080_WriteRegister(BK1080_Register_t Register, uint16_t Value)
 uint16_t BK1080_GetFreqLoLimit(uint8_t band)
 {
 	(void)band;
-	return (si4732mode == SI47XX_AM) ? 500 : 875;
+	return SI47XX_IsAMFamily() ? 500 : 875;
 }
 
 uint16_t BK1080_GetFreqHiLimit(uint8_t band)
 {
 	(void)band;
-	return (si4732mode == SI47XX_AM) ? 30000 : 1080;
+	return SI47XX_IsAMFamily() ? 30000 : 1080;
 }

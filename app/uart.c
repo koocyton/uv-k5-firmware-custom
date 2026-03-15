@@ -77,6 +77,7 @@ typedef struct {
 	uint8_t  Size;
 	uint8_t  Padding;
 	uint32_t Timestamp;
+	uint8_t  ADD[2];   /* low 16 bits of 32-bit EEPROM address (for 0x052B) */
 } CMD_051B_t;
 
 typedef struct {
@@ -201,6 +202,13 @@ static void SendVersion(void)
 	strcpy(Reply.Data.Version, Version);
 	Reply.Data.bHasCustomAesKey = bHasCustomAesKey;
 	Reply.Data.bIsInLockScreen = bIsInLockScreen;
+#ifdef ENABLE_2MBIT_EEPROM
+	Reply.Data.Padding[0] = 0x00;
+	Reply.Data.Padding[1] = 0x01;   /* 256 KB hint for CPS */
+#else
+	Reply.Data.Padding[0] = 0x00;
+	Reply.Data.Padding[1] = 0x00;
+#endif
 	Reply.Data.Challenge[0] = gChallenge[0];
 	Reply.Data.Challenge[1] = gChallenge[1];
 	Reply.Data.Challenge[2] = gChallenge[2];
@@ -273,8 +281,15 @@ static void CMD_051B(const uint8_t *pBuffer)
 	if (bHasCustomAesKey)
 		bLocked = gIsLocked;
 
-	if (!bLocked)
-		EEPROM_ReadBuffer(pCmd->Offset, Reply.Data.Data, pCmd->Size);
+	if (!bLocked) {
+		if (pCmd->Header.ID == 0x052B) {
+			/* 32-bit EEPROM address for 2Mbit: (Offset<<16) | (ADD[1]<<8) | ADD[0] */
+			uint32_t addr = ((uint32_t)pCmd->Offset << 16) | ((uint32_t)pCmd->ADD[1] << 8) | pCmd->ADD[0];
+			EEPROM_ReadBuffer32(addr, Reply.Data.Data, pCmd->Size);
+		} else {
+			EEPROM_ReadBuffer(pCmd->Offset, Reply.Data.Data, pCmd->Size);
+		}
+	}
 
 	SendReply(&Reply, pCmd->Size + 8);
 }
@@ -323,6 +338,43 @@ static void CMD_051D(const uint8_t *pBuffer)
 			SETTINGS_InitEEPROM();
 	}
 
+	SendReply(&Reply, sizeof(Reply));
+}
+
+/* 32-bit EEPROM write for 2Mbit (0x0538): address = (Offset<<16)|(Data[1]<<8)|Data[0], payload from Data[2] */
+static void CMD_0538(const uint8_t *pBuffer)
+{
+	const CMD_051D_t *pCmd = (const CMD_051D_t *)pBuffer;
+	REPLY_051D_t Reply;
+	unsigned int i;
+
+	if (pCmd->Timestamp != Timestamp)
+		return;
+
+	gSerialConfigCountDown_500ms = 12;
+	#ifdef ENABLE_FMRADIO
+	gFmRadioCountdown_500ms = fm_radio_countdown_500ms;
+	#endif
+
+	Reply.Header.ID = 0x051E;
+	Reply.Header.Size = sizeof(Reply.Data);
+	Reply.Data.Offset = pCmd->Offset;
+
+	if (pCmd->Size <= 2)
+	{
+		SendReply(&Reply, sizeof(Reply));
+		return;
+	}
+
+	uint32_t base = ((uint32_t)pCmd->Offset << 16) | ((uint32_t)pCmd->Data[1] << 8) | pCmd->Data[0];
+	uint16_t n = (uint16_t)(pCmd->Size - 2);
+	for (i = 0; i < n; i += 8) {
+		uint16_t chunk = n - i;
+		if (chunk > 8)
+			chunk = 8;
+		EEPROM_WriteBuffer32(base + i, &pCmd->Data[2 + i], chunk);
+	}
+	SETTINGS_InitEEPROM();
 	SendReply(&Reply, sizeof(Reply));
 }
 
@@ -574,11 +626,15 @@ void UART_HandleCommand(void)
 			break;
 	
 		case 0x051B:
+		case 0x052B:
 			CMD_051B(UART_Command.Buffer);
 			break;
 	
 		case 0x051D:
 			CMD_051D(UART_Command.Buffer);
+			break;
+		case 0x0538:
+			CMD_0538(UART_Command.Buffer);
 			break;
 	
 		case 0x051F:	// Not implementing non-authentic command

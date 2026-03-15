@@ -4,21 +4,23 @@
 # 1 = enable
 
 # ---- STOCK QUANSHENG FERATURES ----
-# With ENABLE_FM_SI4732=1, flash is tight; set ENABLE_UART=1 only if you need UART.
-ENABLE_UART                   ?= 0
+# UART = 电脑写频/连接 (CPS、编程线). 0=关闭(省Flash,电脑连不上); 1=开启(需配合关闭其它功能才能塞进Flash,见README).
+ENABLE_UART                   ?= 1
 ENABLE_AIRCOPY                ?= 0
 ENABLE_FMRADIO                ?= 1
 # FM radio chip: 0 = BK1080 (stock), 1 = Si4732 (FM/AM)
 ENABLE_FM_SI4732              ?= 1
 # Si4732: 1 = invert (pin low = FM), 0 = normal (pin high = FM). Try 0 then 1 if no sound.
 ENABLE_FM_SI4732_AUDIO_PATH_INVERTED ?= 0
+# 2Mbit EEPROM: 1=report 256KB to CPS (version "HS" + Padding hint). 0=report 64Kbit.
+ENABLE_2MBIT_EEPROM           ?= 1
 ENABLE_NOAA                   ?= 0
 ENABLE_VOICE                  ?= 0
 ENABLE_VOX                    ?= 1
 ENABLE_ALARM                  ?= 0
 ENABLE_TX1750                 ?= 0
 ENABLE_PWRON_PASSWORD         ?= 0
-ENABLE_DTMF_CALLING           ?= 1
+ENABLE_DTMF_CALLING           ?= 0
 ENABLE_FLASHLIGHT             ?= 1
 
 # ---- CUSTOM MODS ----
@@ -281,6 +283,9 @@ ifeq ($(ENABLE_FM_SI4732),1)
 endif
 ifeq ($(ENABLE_FM_SI4732_AUDIO_PATH_INVERTED),1)
 	CFLAGS += -DENABLE_FM_SI4732_AUDIO_PATH_INVERTED
+endif
+ifeq ($(ENABLE_2MBIT_EEPROM),1)
+	CFLAGS += -DENABLE_2MBIT_EEPROM
 endif
 ifeq ($(ENABLE_UART),1)
 	CFLAGS += -DENABLE_UART

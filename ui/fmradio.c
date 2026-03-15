@@ -39,8 +39,9 @@ void UI_DisplayFM(void)
 	UI_DisplayClear();
 
 #ifdef ENABLE_FM_SI4732
-	if (si4732mode == SI47XX_AM) {
-		UI_PrintString("AM", 2, 0, 0, 8);
+	if (SI47XX_IsAMFamily()) {
+		const char *mod = (si4732mode == SI47XX_AM) ? "AM" : (si4732mode == SI47XX_LSB) ? "LSB" : (si4732mode == SI47XX_USB) ? "USB" : "CW";
+		UI_PrintString(mod, 2, 0, 0, 8);
 		sprintf(String, "0.5-30M %uk", (unsigned)FM_GetAM_StepKHz());
 	} else
 #endif
@@ -73,8 +74,8 @@ void UI_DisplayFM(void)
 		pPrintStr = "DEL?";
 	} else if (gFM_ScanState == FM_SCAN_OFF) {
 #ifdef ENABLE_FM_SI4732
-		if (si4732mode == SI47XX_AM) {
-			pPrintStr = ""; /* AM: hide VFO label */
+		if (SI47XX_IsAMFamily()) {
+			pPrintStr = ""; /* AM/LSB/USB/CW: hide VFO label */
 		} else
 #endif
 		{
@@ -109,7 +110,7 @@ void UI_DisplayFM(void)
 	} else {
 		if (gInputBoxIndex == 0) {
 #ifdef ENABLE_FM_SI4732
-			if (si4732mode == SI47XX_AM)
+			if (SI47XX_IsAMFamily())
 				sprintf(String, "%5uk", (unsigned)siCurrentFreq);
 			else
 #endif
@@ -117,7 +118,7 @@ void UI_DisplayFM(void)
 		} else {
 			const char * ascii = INPUTBOX_GetAscii();
 #ifdef ENABLE_FM_SI4732
-			if (si4732mode == SI47XX_AM)
+			if (SI47XX_IsAMFamily())
 				sprintf(String, "%.*sk", (int)gInputBoxIndex, ascii);
 			else
 #endif

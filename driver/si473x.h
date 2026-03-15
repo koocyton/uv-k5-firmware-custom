@@ -557,6 +557,8 @@ void SI47XX_PowerUp(void);
 void SI47XX_PowerDown(void);
 void SI47XX_SetFreq(uint16_t freq);
 void SI47XX_SwitchMode(SI47XX_MODE mode);
+bool SI47XX_IsAMFamily(void); /* true if AM, LSB, USB, or CW */
+bool SI47XX_IsSSB(void);     /* true if LSB or USB (patch mode) */
 void RSQ_GET(void);
 void SI47XX_SetAutomaticGainControl(uint8_t AGCDIS, uint8_t AGCIDX);
 void SI47XX_SetSeekFmLimits(uint16_t bottom, uint16_t top);

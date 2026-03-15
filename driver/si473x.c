@@ -21,6 +21,8 @@ RSQStatus rsqStatus;
 uint16_t divider = 1000;
 
 SI47XX_MODE si4732mode = SI47XX_FM;
+
+static bool isAmFamilyStatic(void);
 uint16_t siCurrentFreq = 10210;
 
 void SI47XX_ReadBuffer(uint8_t *buf, uint8_t size) {
@@ -57,10 +59,9 @@ static void sendProperty(uint16_t prop, uint16_t parameter) {
 
 void RSQ_GET() {
   uint8_t cmd[2] = {CMD_FM_RSQ_STATUS, 0x01};
-  if (si4732mode != SI47XX_FM) {
+  if (isAmFamilyStatic()) {
     cmd[0] = CMD_AM_RSQ_STATUS;
   }
-
   waitToSend();
   SI47XX_WriteBuffer(cmd, 2);
   SI47XX_ReadBuffer(rsqStatus.raw, si4732mode == SI47XX_FM ? 8 : 6);
@@ -85,7 +86,7 @@ static void enableRDS(void) {
 }
 
 void SI47XX_SetAutomaticGainControl(uint8_t AGCDIS, uint8_t AGCIDX) {
-  uint8_t cmd = (si4732mode == SI47XX_FM) ? CMD_FM_AGC_OVERRIDE : CMD_AM_AGC_OVERRIDE;
+  uint8_t cmd = si4732mode == SI47XX_FM ? CMD_FM_AGC_OVERRIDE : CMD_AM_AGC_OVERRIDE;
   waitToSend();
   uint8_t cmd2[3] = {cmd, (uint8_t)(AGCDIS & 1U), AGCIDX};
   SI47XX_WriteBuffer(cmd2, 3);
@@ -95,15 +96,33 @@ void SI47XX_SetAutomaticGainControl(uint8_t AGCDIS, uint8_t AGCIDX) {
 static bool FreqCheck(uint32_t f) {
     if (si4732mode == SI47XX_FM)
         return f >= 6400000 && f <= 10800000;
-    return f >= 500000 && f <= 30000000; /* AM 500 kHz–30 MHz */
+    /* AM / LSB / USB / CW: 500 kHz–30 MHz */
+    return f >= 500000 && f <= 30000000;
 }
+
+static bool isAmFamilyStatic(void) {
+    return si4732mode != SI47XX_FM;
+}
+
+bool SI47XX_IsAMFamily(void) {
+    return isAmFamilyStatic();
+}
+
+bool SI47XX_IsSSB(void) {
+    return si4732mode == SI47XX_LSB || si4732mode == SI47XX_USB;
+}
+/* SSB patch: same layout as uv-k5-firmware-custom (patch at end of 256KB EEPROM) */
+#define SI473X_EEPROM_SIZE      262144U
+#define SI473X_PATCH_SIZE      15832U
+#define SI473X_PATCH_EEPROM    (SI473X_EEPROM_SIZE - SI473X_PATCH_SIZE)
+
 /* K5 EEPROM: FM at 0x0E8C (4 bytes); AM at 0x0E68 (2 bytes, kHz) to avoid clash with 0x0E90 */
 #define SI473X_EEPROM_FREQ_BASE  0x0E8CU
 #define SI473X_EEPROM_AM_KHZ    0x0E68U
 
 static uint32_t Read_FreqSaved(void)
 {
-    if (si4732mode == SI47XX_AM) {
+    if (isAmFamilyStatic()) {
         uint16_t khz;
         EEPROM_ReadBuffer(SI473X_EEPROM_AM_KHZ, (uint8_t *)&khz, 2);
         if (khz < 500 || khz > 30000)
@@ -137,25 +156,67 @@ void SI47XX_PowerUp() {
   RST_HIGH;
 
   uint8_t cmd[3] = {CMD_POWER_UP, FLG_XOSCEN | FUNC_FM, OUT_ANALOG};
-  if (si4732mode == SI47XX_AM) {
+  if (isAmFamilyStatic()) {
     cmd[1] = FLG_XOSCEN | FUNC_AM;
   }
   waitToSend();
   SI47XX_WriteBuffer(cmd, 3);
   SYSTEM_DelayMs(500);
 
-    AUDIO_AudioPathOn();
+  AUDIO_AudioPathOn();
   setVolume(63);
 
   if (si4732mode == SI47XX_FM) {
     enableRDS();
-  } else if (si4732mode == SI47XX_AM) {
+  } else if (isAmFamilyStatic()) {
+    /* AM / LSB / USB / CW */
     SI47XX_SetAutomaticGainControl(1, 0);
     sendProperty(PROP_AM_SOFT_MUTE_MAX_ATTENUATION, 0);
     sendProperty(PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN, 0x7800);
     SI47XX_SetSeekAmLimits(500, 30000); /* 500 kHz–30 MHz */
   }
-  SI47XX_SetFreq(  Read_FreqSaved()/divider);
+  SI47XX_SetFreq(Read_FreqSaved() / divider);
+}
+
+static void SI47XX_SsbSetup(uint8_t AUDIOBW, uint8_t SBCUTFLT, uint8_t AVC_DIVIDER,
+    uint8_t AVCEN, uint8_t SMUTESEL, uint8_t DSP_AFCDIS) {
+  uint8_t lo = (AUDIOBW & 0x0F) | ((SBCUTFLT & 0x0F) << 4);
+  uint8_t hi = (AVC_DIVIDER & 0x0F) | (AVCEN ? 0x10U : 0) | (SMUTESEL ? 0x20U : 0) | (DSP_AFCDIS ? 0x80U : 0);
+  sendProperty(PROP_SSB_MODE, (uint16_t)lo | ((uint16_t)hi << 8));
+}
+
+static bool SI47XX_downloadPatch(void) {
+  uint8_t buf[248];
+  for (uint16_t offset = 0; offset < SI473X_PATCH_SIZE; offset += sizeof(buf)) {
+    uint32_t n = SI473X_PATCH_SIZE - offset;
+    if (n > sizeof(buf)) n = sizeof(buf);
+    EEPROM_ReadBuffer32(SI473X_PATCH_EEPROM + offset, buf, (uint16_t)n);
+    for (uint16_t i = 0; i < n; i += 8) {
+      waitToSend();
+      SI47XX_WriteBuffer(buf + i, 8);
+    }
+    SYSTEM_DelayMs(1);
+  }
+  SYSTEM_DelayMs(250);
+  return true;
+}
+
+static void SI47XX_PatchPowerUp(void) {
+  RST_HIGH;
+  /* POWER_UP: AM, crystal, patch enable (same as uv-k5-firmware-custom) */
+  uint8_t cmd[3] = {CMD_POWER_UP, 0x31, OUT_ANALOG}; /* 0x31 = FLG_XOSCEN | FLG_PATCH | FUNC_AM */
+  waitToSend();
+  SI47XX_WriteBuffer(cmd, 3);
+  SYSTEM_DelayMs(550);
+
+  SI47XX_downloadPatch();
+  SI47XX_SsbSetup(2, 1, 0, 1, 0, 1); /* AUDIOBW=3kHz, SBCUTFLT=1, AVC=1, DSP_AFCDIS=1 */
+
+  AUDIO_AudioPathOn();
+  setVolume(63);
+  SI47XX_SetFreq(Read_FreqSaved() / divider);
+  sendProperty(PROP_SSB_SOFT_MUTE_MAX_ATTENUATION, 0);
+  sendProperty(PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN, 0x7800);
 }
 
 void SI47XX_PowerDown() {
@@ -173,8 +234,16 @@ void SI47XX_PowerDown() {
 }
 
 void SI47XX_SwitchMode(SI47XX_MODE mode) {
-    if (si4732mode != mode) {
-        si4732mode = mode;
+    if (si4732mode == mode)
+        return;
+    bool wasSSB = SI47XX_IsSSB() || (si4732mode == SI47XX_CW);
+    si4732mode = mode;
+    if (mode == SI47XX_LSB || mode == SI47XX_USB || mode == SI47XX_CW) {
+        if (!wasSSB) {
+            SI47XX_PowerDown();
+            SI47XX_PatchPowerUp();
+        }
+    } else {
         SI47XX_PowerDown();
         SI47XX_PowerUp();
     }
@@ -189,6 +258,21 @@ void SI47XX_SetFreq(uint16_t freq) {
   if (si4732mode == SI47XX_AM) {
     cmd[0] = CMD_AM_TUNE_FREQ;
     size = 5;
+    if (freq > 1800)
+      cmd[5] = 1;
+  } else if (SI47XX_IsSSB()) {
+    cmd[0] = CMD_AM_TUNE_FREQ;
+    size = 6;
+    if (si4732mode == SI47XX_USB)
+      cmd[1] = 0x80;
+    else
+      cmd[1] = 0x40;
+    if (freq > 1800)
+      cmd[5] = 1;
+  } else if (si4732mode == SI47XX_CW) {
+    cmd[0] = CMD_AM_TUNE_FREQ;
+    size = 6;
+    cmd[1] = 0x40; /* LSB for CW */
     if (freq > 1800)
       cmd[5] = 1;
   }
