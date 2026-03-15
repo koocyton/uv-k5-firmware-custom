@@ -126,7 +126,7 @@
           const writer = port.writable.getWriter();
           log('串口已打开，发送 0x0514 获取会话…');
           await cmd0514(writer);
-          writer.release();
+          writer.releaseLock();
           log('请在对讲机进入“写频/编程”模式后再点“写入”。若已就绪可直接点“写入 0x3C228”。', false);
           btnConnect.textContent = '已连接';
           btnConnect.disabled = true;
@@ -157,7 +157,7 @@
             await new Promise(r => setTimeout(r, 150));
             if ((i / CHUNK_PAYLOAD) % 20 === 0 && i > 0) log('已写 ' + i + ' / ' + toWrite.length + ' 字节');
           }
-          writer.release();
+          writer.releaseLock();
           log('写入完成。请重启对讲机后进入 AM 波段用长按 0 切换 LSB/USB/CW 测试。', false);
         } catch (e) {
           log('写入失败: ' + e.message, true);
