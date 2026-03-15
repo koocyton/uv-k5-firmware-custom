@@ -210,13 +210,16 @@ static void SI47XX_PatchPowerUp(void) {
   SYSTEM_DelayMs(550);
 
   SI47XX_downloadPatch();
-  SI47XX_SsbSetup(2, 1, 0, 1, 0, 1); /* AUDIOBW=3kHz, SBCUTFLT=1, AVC=1, DSP_AFCDIS=1 */
+  /* AUDIOBW: 0=1.2k 1=2.2k 2=3k 3=4k；收窄带宽降噪，2.2k 兼顾语音与噪声 */
+  SI47XX_SsbSetup(1, 2, 0, 1, 0, 1); /* AUDIOBW=2.2kHz, SBCUTFLT=2, AVC=1, DSP_AFCDIS=1 */
 
   AUDIO_AudioPathOn();
   setVolume(63);
   SI47XX_SetFreq(Read_FreqSaved() / divider);
-  sendProperty(PROP_SSB_SOFT_MUTE_MAX_ATTENUATION, 0);
-  sendProperty(PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN, 0x7800);
+  /* 弱信号时软静音减轻底噪；AVC 最大增益略降减少噪声放大 */
+  sendProperty(PROP_SSB_SOFT_MUTE_MAX_ATTENUATION, 8);   /* 8dB 衰减 */
+  sendProperty(PROP_SSB_SOFT_MUTE_SNR_THRESHOLD, 8);     /* SNR<8dB 时触发 */
+  sendProperty(PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN, 0x5000); /* 原 0x7800 */
 }
 
 void SI47XX_PowerDown() {
