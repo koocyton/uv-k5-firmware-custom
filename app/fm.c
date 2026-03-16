@@ -58,16 +58,35 @@ uint16_t          gFM_RestoreCountdown_10ms;
 #ifdef ENABLE_FM_SI4732
 /* AM mode: current frequency in kHz (500–30000, MW+SW). Used when si4732mode == SI47XX_AM. */
 static uint16_t gAM_FrequencyKHz = 720;
-/* AM step index: 0=1000, 1=100, 2=10, 3=1 kHz. STAR in AM cycles this. */
-static uint8_t gAM_StepIndex = 3;  /* 0=1000k 1=100k 2=10k 3=1k，默认 1k */
+/* AM 底部选项：长按 M 切换焦点 0=LNA 1=BW 2=STP；短按 * 修改当前子选项 */
+static uint8_t gAM_OptionFocus = 0;  /* 0=LNA, 1=BW, 2=STP，默认 LNA */
+static uint8_t gAM_LNA_Index = 0;   /* 0=AGC ON, 1..5=ATT 0,1,5,15,26 */
+static uint8_t gAM_BW_Index = 2;    /* 0..6 = 0.5,1,1.2,2.2,3,4,5 kHz，默认 1.2 */
+/* Step index 0..5 = 1, 5, 10, 50, 100, 1000 kHz */
+static uint8_t gAM_StepIndex = 2;   /* 默认 10k */
 /* 长按 F 刚进入单边带时置位，松键清除；避免同一长按的后续 held 事件立刻触发“退回 AM” */
 static bool gFKeyJustEnteredSSB = false;
 /* 本次 F 键已触发长按，松键前不再触发短按；松键时清除 */
 static bool gFKeyLongPressDone = false;
+/* 本次 M 键已触发长按（切换 LNA/BW/STP 焦点），松键时不再触发 Key_MENU 短按逻辑 */
+static bool gMKeyLongPressHandled = false;
+
+static const uint16_t gAM_StepKHzTable[] = { 1, 5, 10, 50, 100, 1000 };
+#define AM_STEP_COUNT ((unsigned)ARRAY_SIZE(gAM_StepKHzTable))
 
 uint16_t FM_GetAM_StepKHz(void)
 {
-	return (gAM_StepIndex == 0) ? 1000 : (gAM_StepIndex == 1) ? 100 : (gAM_StepIndex == 2) ? 10 : 1;
+	return gAM_StepKHzTable[gAM_StepIndex < AM_STEP_COUNT ? gAM_StepIndex : 0];
+}
+
+uint8_t FM_GetAM_OptionFocus(void) { return gAM_OptionFocus; }
+uint8_t FM_GetAM_LNA_Index(void)   { return gAM_LNA_Index; }
+uint8_t FM_GetAM_BW_Index(void)   { return gAM_BW_Index; }
+uint8_t FM_GetAM_StepIndex(void)   { return gAM_StepIndex; }
+
+static void FM_ApplyAMOptions(void) {
+	SI47XX_SetAMLna(gAM_LNA_Index);
+	SI47XX_SetAMBandwidth(gAM_BW_Index);
 }
 
 bool FM_IsAMMode(void)
@@ -442,6 +461,7 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
 						(si4732mode == SI47XX_USB) ? SI47XX_CW : SI47XX_AM;
 					SI47XX_SwitchMode(next);
 					SI47XX_SetFreq(gAM_FrequencyKHz);
+					FM_ApplyAMOptions();
 					gUpdateStatus = true;
 					break;
 				}
@@ -590,9 +610,9 @@ static void Key_UP_DOWN(uint8_t state, int8_t Step)
 	}
 
 #ifdef ENABLE_FM_SI4732
-	/* AM mode: step 1000/100/10/1 kHz (STAR cycles), 500–30000 kHz */
+	/* AM mode: step 1/5/10/50/100/1000 kHz (STAR 改子选项), 500–30000 kHz */
 	if (SI47XX_IsAMFamily()) {
-		uint16_t step = (gAM_StepIndex == 0) ? 1000 : (gAM_StepIndex == 1) ? 100 : (gAM_StepIndex == 2) ? 10 : 1;
+		uint16_t step = FM_GetAM_StepKHz();
 		int32_t next = (int32_t)gAM_FrequencyKHz + (int32_t)Step * (int32_t)step;
 		if (next < 500) next = 30000;
 		else if (next > 30000) next = 500;
@@ -658,8 +678,22 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 		case KEY_STAR:
 #ifdef ENABLE_FM_SI4732
 			if (SI47XX_IsAMFamily() && gInputBoxIndex == 0 && state == BUTTON_EVENT_SHORT) {
-				gAM_StepIndex = (gAM_StepIndex + 1) & 3; /* 0→1→2→3→0: 1000,100,10,1 */
+				/* 短按 * 修改当前焦点对应的子选项 */
+				switch (gAM_OptionFocus) {
+				case 0:
+					gAM_LNA_Index = (gAM_LNA_Index + 1) % 6;
+					SI47XX_SetAMLna(gAM_LNA_Index);
+					break;
+				case 1:
+					gAM_BW_Index = (gAM_BW_Index + 1) % 7;
+					SI47XX_SetAMBandwidth(gAM_BW_Index);
+					break;
+				case 2:
+					gAM_StepIndex = (gAM_StepIndex + 1) % AM_STEP_COUNT;
+					break;
+				}
 				gUpdateStatus = true;
+				gRequestDisplayScreen = DISPLAY_FM;
 				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 				break;
 			}
@@ -667,6 +701,26 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			Key_FUNC(Key, state);
 			break;
 		case KEY_MENU:
+#ifdef ENABLE_FM_SI4732
+			if (SI47XX_IsAMFamily() && bKeyHeld && !gMKeyLongPressHandled) {
+				/* 长按 M：仅首次 held 切换焦点，避免重复触发；置位后松键不触发 Key_MENU */
+				gAM_OptionFocus = (gAM_OptionFocus + 1) % 3;
+				gMKeyLongPressHandled = true;
+				gRequestDisplayScreen = DISPLAY_FM;
+				gUpdateStatus = true;
+				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
+				break;
+			}
+			if (!bKeyPressed && gMKeyLongPressHandled) {
+				/* 松键：清除长按标志，不触发 Key_MENU */
+				gMKeyLongPressHandled = false;
+				break;
+			}
+			if (state == BUTTON_EVENT_SHORT && gMKeyLongPressHandled) {
+				gMKeyLongPressHandled = false;
+				break;
+			}
+#endif
 			Key_MENU(state);
 			break;
 		case KEY_UP:
@@ -689,6 +743,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 						if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
 						FM_SaveAMFreqToEeprom();
 						SI47XX_SetFreq(gAM_FrequencyKHz);
+						FM_ApplyAMOptions();
 						gUpdateStatus = true;
 					} else if (si4732mode == SI47XX_AM) {
 						SI47XX_SwitchMode(SI47XX_FM);
@@ -699,6 +754,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 							(si4732mode == SI47XX_LSB) ? SI47XX_CW : SI47XX_USB;
 						SI47XX_SwitchMode(next);
 						SI47XX_SetFreq(gAM_FrequencyKHz);
+						FM_ApplyAMOptions();
 						gUpdateStatus = true;
 					}
 					gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
@@ -712,6 +768,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 						if (!gFKeyJustEnteredSSB) {
 							SI47XX_SwitchMode(SI47XX_AM);
 							SI47XX_SetFreq(gAM_FrequencyKHz);
+							FM_ApplyAMOptions();
 							gUpdateStatus = true;
 							gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 						}
@@ -724,6 +781,7 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 						ST7565_BlitFullScreen();
 						SI47XX_SwitchMode(SI47XX_USB);
 						SI47XX_SetFreq(gAM_FrequencyKHz);
+						FM_ApplyAMOptions();
 						gUpdateStatus = true;
 						gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 						gFKeyJustEnteredSSB = true;

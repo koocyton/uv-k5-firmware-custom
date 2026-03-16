@@ -52,7 +52,42 @@ void UI_DisplayFM(void)
 	if (SI47XX_IsAMFamily()) {
 		const char *mod = (si4732mode == SI47XX_AM) ? "AM" : (si4732mode == SI47XX_LSB) ? "LSB" : (si4732mode == SI47XX_USB) ? "USB" : "CW";
 		UI_PrintString(mod, 2, 0, 0, 8);
-		sprintf(String, "0.5-30M %uk", (unsigned)FM_GetAM_StepKHz());
+		/* 底部倒数第二行(line 5)：LNA/BW/STP 右移 4px，选中时反色块包住文字 */
+		{
+			const uint8_t focus = FM_GetAM_OptionFocus();
+			#define AM_OPT_X0  4
+			#define AM_OPT_X1 46
+			#define AM_OPT_X2 88
+			#define AM_OPT_W  36
+			UI_PrintStringSmallNormal("LNA", AM_OPT_X0, 0, 5);
+			UI_PrintStringSmallNormal("BW", AM_OPT_X1, 0, 5);
+			UI_PrintStringSmallNormal("STP", AM_OPT_X2, 0, 5);
+			if (focus == 0) UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X0, 40, AM_OPT_X0 + AM_OPT_W - 1, 47);
+			else if (focus == 1) UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X1, 40, AM_OPT_X1 + AM_OPT_W - 1, 47);
+			else UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X2, 40, AM_OPT_X2 + AM_OPT_W - 1, 47);
+			#undef AM_OPT_X0
+			#undef AM_OPT_X1
+			#undef AM_OPT_X2
+			#undef AM_OPT_W
+		}
+		/* 底行(line 6)左侧：当前焦点对应的子选项值；右侧：RSSI/SNR */
+		{
+			char valStr[12];
+			const uint8_t focus = FM_GetAM_OptionFocus();
+			const uint8_t lna = FM_GetAM_LNA_Index();
+			const uint8_t bw = FM_GetAM_BW_Index();
+			static const char * const lnaVals[] = { "AGC ON", "ATT 0", "ATT 1", "ATT 5", "ATT 15", "ATT 26" };
+			static const char * const bwVals[] = { "0.5", "1.0", "1.2", "2.2", "3.0", "4.0", "5.0" };
+			if (focus == 0) sprintf(valStr, "%s", lna < 6u ? lnaVals[lna] : "AGC ON");
+			else if (focus == 1) sprintf(valStr, "%sk", bw < 7u ? bwVals[bw] : "1.2");
+			else { const uint16_t s = FM_GetAM_StepKHz(); if (s >= 1000) sprintf(valStr, "%uk", (unsigned)(s/1000)); else sprintf(valStr, "%u", (unsigned)s); }
+			UI_PrintStringSmallNormal(valStr, 0, 0, 6);
+		}
+		if (gInputBoxIndex == 0) {
+			RSQ_GET();
+			sprintf(String, "%u/%u", (unsigned)rsqStatus.resp.RSSI, (unsigned)rsqStatus.resp.SNR);
+			UI_PrintStringSmallNormal(String, 88, 0, 6);
+		}
 	} else
 #endif
 	{
@@ -62,12 +97,12 @@ void UI_DisplayFM(void)
 			gEeprom.FM_Band == 0 ? ".5" : "",
 			BK1080_GetFreqHiLimit(gEeprom.FM_Band)/10
 		);
+		UI_PrintStringSmallNormal(String, 1, 0, 6);
 	}
-	UI_PrintStringSmallNormal(String, 1, 0, 6);
 
 #ifdef ENABLE_FM_SI4732
-	/* RSSI/SNR on same line as step (line 6), far right; format "RSSI/SNR" */
-	if (gInputBoxIndex == 0) {
+	/* FM 时 RSSI/SNR 在 line 6 右侧 */
+	if (!SI47XX_IsAMFamily() && gInputBoxIndex == 0) {
 		RSQ_GET();
 		sprintf(String, "%u/%u", (unsigned)rsqStatus.resp.RSSI, (unsigned)rsqStatus.resp.SNR);
 		UI_PrintStringSmallNormal(String, 88, 0, 6);

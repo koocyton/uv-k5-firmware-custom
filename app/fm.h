@@ -58,9 +58,13 @@ void    FM_Play(void);
 void    FM_Start(void);
 
 #if defined(ENABLE_FMRADIO) && defined(ENABLE_FM_SI4732)
-uint16_t FM_GetAM_StepKHz(void); /* 1, 10, 100, or 1000 */
-bool     FM_IsAMMode(void);      /* true when in AM (for status bar) */
-void     FM_LoadAMFrequencyFromEeprom(void); /* load last AM freq from EEPROM at boot */
+uint16_t FM_GetAM_StepKHz(void);
+bool     FM_IsAMMode(void);
+void     FM_LoadAMFrequencyFromEeprom(void);
+uint8_t  FM_GetAM_OptionFocus(void); /* 0=LNA 1=BW 2=STP */
+uint8_t  FM_GetAM_LNA_Index(void);
+uint8_t  FM_GetAM_BW_Index(void);
+uint8_t  FM_GetAM_StepIndex(void);
 #endif
 
 #endif

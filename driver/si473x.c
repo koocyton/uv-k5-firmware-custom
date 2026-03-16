@@ -317,3 +317,27 @@ void SI47XX_SetSeekAmLimits(uint16_t bottom, uint16_t top) {
   sendProperty(PROP_AM_SEEK_BAND_BOTTOM, bottom);
   sendProperty(PROP_AM_SEEK_BAND_TOP, top);
 }
+
+/* LNA index: 0=AGC ON, 1=ATT 0, 2=ATT 1, 3=ATT 5, 4=ATT 15, 5=ATT 26 dB. AGCIDX 0=min att (max gain), 37≈max att. */
+static const uint8_t am_lna_agcidx[] = { 0, 0, 1, 5, 15, 26 };
+
+void SI47XX_SetAMLna(uint8_t index) {
+  if (index == 0) {
+    SI47XX_SetAutomaticGainControl(0, 0);
+  } else if (index <= 5) {
+    SI47XX_SetAutomaticGainControl(AGC_OVERRIDE_ARG1_DISABLE_AGC, am_lna_agcidx[index]);
+  }
+}
+
+/* BW index 0..6 -> 0.5,1,1.2,2.2,3,4,5 kHz. AM: FLG_AMCHFLT 6k=0,4k=1,3k=2,2k=3,1k=4,1.8k=5,2.5k=6. SSB: AUDIOBW 4=0.5k,5=1k,0=1.2k,1=2.2k,2=3k,3=4k. */
+static const uint8_t am_bw_amchflt[] = { FLG_AMCHFLT_1KHZ, FLG_AMCHFLT_1KHZ, FLG_AMCHFLT_1KHZ8, FLG_AMCHFLT_2KHZ5, FLG_AMCHFLT_3KHZ, FLG_AMCHFLT_4KHZ, FLG_AMCHFLT_6KHZ };
+static const uint8_t am_bw_ssb_audiobw[] = { 4, 5, 0, 1, 2, 3, 3 };
+
+void SI47XX_SetAMBandwidth(uint8_t index) {
+  if (index > 6) index = 6;
+  if (si4732mode == SI47XX_AM) {
+    sendProperty(PROP_AM_CHANNEL_FILTER, (uint16_t)am_bw_amchflt[index] | (0U << 8));
+  } else if (SI47XX_IsSSB() || si4732mode == SI47XX_CW) {
+    SI47XX_SsbSetup(am_bw_ssb_audiobw[index], 2, 0, 1, 0, 1);
+  }
+}
