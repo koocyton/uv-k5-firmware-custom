@@ -31,7 +31,9 @@
 #include "driver/si473x.h"
 #endif
 #include "driver/gpio.h"
+#include "driver/st7565.h"
 #include "driver/system.h"
+#include "ui/fmradio.h"
 #include "functions.h"
 #include "misc.h"
 #include "settings.h"
@@ -717,6 +719,9 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 						if (gAM_FrequencyKHz < 500) gAM_FrequencyKHz = 500;
 						if (gAM_FrequencyKHz > 30000) gAM_FrequencyKHz = 30000;
 						FM_SaveAMFreqToEeprom();
+						UI_DisplayFM();
+						UI_DisplayFmWait();
+						ST7565_BlitFullScreen();
 						SI47XX_SwitchMode(SI47XX_USB);
 						SI47XX_SetFreq(gAM_FrequencyKHz);
 						gUpdateStatus = true;

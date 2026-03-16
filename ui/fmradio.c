@@ -32,6 +32,16 @@
 #include "ui/inputbox.h"
 #include "ui/ui.h"
 
+#ifdef ENABLE_FM_SI4732
+void UI_DisplayFmWait(void)
+{
+	/* 中间黑色长方块，内显 wait（白字，小写，方块与文字均居中） */
+	const int16_t x1 = 40, y1 = 18, x2 = 87, y2 = 37;
+	UI_FillRectangleBuffer(gFrameBuffer, x1, y1, x2, y2, true);
+	UI_PrintStringInverted("wait", (uint8_t)x1, (uint8_t)(x2 + 1), 3, 8);
+}
+#endif
+
 void UI_DisplayFM(void)
 {
 	char String[16] = {0};
@@ -60,7 +70,7 @@ void UI_DisplayFM(void)
 	if (gInputBoxIndex == 0) {
 		RSQ_GET();
 		sprintf(String, "%u/%u", (unsigned)rsqStatus.resp.RSSI, (unsigned)rsqStatus.resp.SNR);
-		UI_PrintStringSmallNormal(String, 95, 0, 6);
+		UI_PrintStringSmallNormal(String, 88, 0, 6);
 	}
 #endif
 
@@ -111,7 +121,7 @@ void UI_DisplayFM(void)
 		if (gInputBoxIndex == 0) {
 #ifdef ENABLE_FM_SI4732
 			if (SI47XX_IsAMFamily())
-				sprintf(String, "%5uk", (unsigned)siCurrentFreq);
+				sprintf(String, "%u.%03u", (unsigned)(siCurrentFreq / 1000), (unsigned)(siCurrentFreq % 1000));
 			else
 #endif
 				sprintf(String, "%3d.%d", gEeprom.FM_FrequencyPlaying / 10, gEeprom.FM_FrequencyPlaying % 10);

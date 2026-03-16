@@ -218,7 +218,7 @@ static bool SI47XX_downloadPatch(void) {
     }
     SYSTEM_DelayMs(1);
   }
-  SYSTEM_DelayMs(250);
+  SYSTEM_DelayMs(120);
   return true;
 }
 
@@ -228,7 +228,7 @@ static void SI47XX_PatchPowerUp(void) {
   uint8_t cmd[3] = {CMD_POWER_UP, 0x31, OUT_ANALOG}; /* 0x31 = FLG_XOSCEN | FLG_PATCH | FUNC_AM */
   waitToSend();
   SI47XX_WriteBuffer(cmd, 3);
-  SYSTEM_DelayMs(550);
+  SYSTEM_DelayMs(280);
 
   SI47XX_downloadPatch();
   SI47XX_ApplyAmAntennaInput(); /* 单边带也按当前 FMI/AMI 选择 */
