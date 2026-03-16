@@ -35,10 +35,10 @@
 #ifdef ENABLE_FM_SI4732
 void UI_DisplayFmWait(void)
 {
-	/* 中间黑色长方块，内显 wait（白字，小写，方块与文字均居中） */
-	const int16_t x1 = 40, y1 = 18, x2 = 87, y2 = 37;
+	/* 中间黑色长方块，内显 waiting（白字）；方块上移 3 像素 */
+	const int16_t x1 = 16, y1 = 15, x2 = 111, y2 = 34;
 	UI_FillRectangleBuffer(gFrameBuffer, x1, y1, x2, y2, true);
-	UI_PrintStringInverted("wait", (uint8_t)x1, (uint8_t)(x2 + 1), 3, 8);
+	UI_PrintStringInverted("waiting", (uint8_t)x1, (uint8_t)(x2 + 1), 2, 8);
 }
 #endif
 
