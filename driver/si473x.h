@@ -564,7 +564,9 @@ void SI47XX_ToggleAmAntennaFMI(void);    /* 切换 FMI/AMI 并立即生效 */
 bool SI47XX_GetAmAntennaFMI(void);      /* true=FMI, false=AMI */
 void RSQ_GET(void);
 void SI47XX_SetAutomaticGainControl(uint8_t AGCDIS, uint8_t AGCIDX);
-/* AM/SSB LNA: index 0=AGC ON, 1..5=ATT 0,1,5,15,26 dB */
+/* AM/SSB: AGC ON/OFF 与 ATT 分离；attIndex 0..4 = 0, 1, 5, 15, 26 dB */
+void SI47XX_SetAMAgcAtt(bool agcOn, uint8_t attIndex);
+/* 兼容旧 LNA 索引：0=AGC ON, 1..5=ATT 0,1,5,15,26 */
 void SI47XX_SetAMLna(uint8_t index);
 /* AM/SSB BW: index 0..6 = 0.5, 1.0, 1.2, 2.2, 3.0, 4.0, 5.0 kHz */
 void SI47XX_SetAMBandwidth(uint8_t index);

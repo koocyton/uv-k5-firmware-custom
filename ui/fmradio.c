@@ -52,35 +52,41 @@ void UI_DisplayFM(void)
 	if (SI47XX_IsAMFamily()) {
 		const char *mod = (si4732mode == SI47XX_AM) ? "AM" : (si4732mode == SI47XX_LSB) ? "LSB" : (si4732mode == SI47XX_USB) ? "USB" : "CW";
 		UI_PrintString(mod, 2, 0, 0, 8);
-		/* 底部倒数第二行(line 5)：LNA/BW/STP 右移 4px，选中时反色块包住文字 */
+		/* 底部倒数第二行(line 5)：AGC/ATT/BW/STP，选中时反色块包住文字 */
 		{
 			const uint8_t focus = FM_GetAM_OptionFocus();
-			#define AM_OPT_X0  4
-			#define AM_OPT_X1 46
-			#define AM_OPT_X2 88
-			#define AM_OPT_W  36
-			UI_PrintStringSmallNormal("LNA", AM_OPT_X0, 0, 5);
-			UI_PrintStringSmallNormal("BW", AM_OPT_X1, 0, 5);
-			UI_PrintStringSmallNormal("STP", AM_OPT_X2, 0, 5);
+			#define AM_OPT_X0  0
+			#define AM_OPT_X1 32
+			#define AM_OPT_X2 64
+			#define AM_OPT_X3 96
+			#define AM_OPT_W  30
+			UI_PrintStringSmallNormal("AGC", AM_OPT_X0, 0, 5);
+			UI_PrintStringSmallNormal("ATT", AM_OPT_X1, 0, 5);
+			UI_PrintStringSmallNormal("BW",  AM_OPT_X2, 0, 5);
+			UI_PrintStringSmallNormal("STP", AM_OPT_X3, 0, 5);
 			if (focus == 0) UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X0, 40, AM_OPT_X0 + AM_OPT_W - 1, 47);
 			else if (focus == 1) UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X1, 40, AM_OPT_X1 + AM_OPT_W - 1, 47);
-			else UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X2, 40, AM_OPT_X2 + AM_OPT_W - 1, 47);
+			else if (focus == 2) UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X2, 40, AM_OPT_X2 + AM_OPT_W - 1, 47);
+			else UI_InvertRectangleBuffer(gFrameBuffer, AM_OPT_X3, 40, AM_OPT_X3 + AM_OPT_W - 1, 47);
 			#undef AM_OPT_X0
 			#undef AM_OPT_X1
 			#undef AM_OPT_X2
+			#undef AM_OPT_X3
 			#undef AM_OPT_W
 		}
 		/* 底行(line 6)左侧：当前焦点对应的子选项值；右侧：RSSI/SNR */
 		{
 			char valStr[12];
 			const uint8_t focus = FM_GetAM_OptionFocus();
-			const uint8_t lna = FM_GetAM_LNA_Index();
+			const uint8_t att = FM_GetAM_ATT_Index();
 			const uint8_t bw = FM_GetAM_BW_Index();
-			static const char * const lnaVals[] = { "AGC ON", "ATT 0", "ATT 1", "ATT 5", "ATT 15", "ATT 26" };
+			static const char * const attVals[] = { "0", "1", "5", "15", "26" };
+			static const char * const stpVals[] = { "1K", "5K", "10K", "100K", "1000K" };
 			static const char * const bwVals[] = { "0.5", "1.0", "1.2", "2.2", "3.0", "4.0", "5.0" };
-			if (focus == 0) sprintf(valStr, "%s", lna < 6u ? lnaVals[lna] : "AGC ON");
-			else if (focus == 1) sprintf(valStr, "%sk", bw < 7u ? bwVals[bw] : "1.2");
-			else { const uint16_t s = FM_GetAM_StepKHz(); if (s >= 1000) sprintf(valStr, "%uk", (unsigned)(s/1000)); else sprintf(valStr, "%u", (unsigned)s); }
+			if (focus == 0) sprintf(valStr, "%s", FM_GetAM_AGC_On() ? "ON" : "OFF");
+			else if (focus == 1) sprintf(valStr, "%s", att < 5u ? attVals[att] : "0");
+			else if (focus == 2) sprintf(valStr, "%sk", bw < 7u ? bwVals[bw] : "1.2");
+			else sprintf(valStr, "%s", stpVals[FM_GetAM_StepIndex() < 5u ? FM_GetAM_StepIndex() : 2]);
 			UI_PrintStringSmallNormal(valStr, 0, 0, 6);
 		}
 		if (gInputBoxIndex == 0) {

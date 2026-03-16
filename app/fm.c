@@ -58,20 +58,19 @@ uint16_t          gFM_RestoreCountdown_10ms;
 #ifdef ENABLE_FM_SI4732
 /* AM mode: current frequency in kHz (500–30000, MW+SW). Used when si4732mode == SI47XX_AM. */
 static uint16_t gAM_FrequencyKHz = 720;
-/* AM 底部选项：长按 M 切换焦点 0=LNA 1=BW 2=STP；短按 * 修改当前子选项 */
-static uint8_t gAM_OptionFocus = 0;  /* 0=LNA, 1=BW, 2=STP，默认 LNA */
-static uint8_t gAM_LNA_Index = 0;   /* 0=AGC ON, 1..5=ATT 0,1,5,15,26 */
+/* AM 底部选项：长按 M 切换焦点 0=AGC 1=ATT 2=BW 3=STP；短按 * 修改当前子选项 */
+static uint8_t gAM_OptionFocus = 0;  /* 0=AGC, 1=ATT, 2=BW, 3=STP */
+static bool    gAM_AGC_On = true;   /* AGC 子选项：ON / OFF */
+static uint8_t gAM_ATT_Index = 0;   /* ATT 子选项：0, 1, 5, 15, 26 dB → index 0..4 */
 static uint8_t gAM_BW_Index = 2;    /* 0..6 = 0.5,1,1.2,2.2,3,4,5 kHz，默认 1.2 */
-/* Step index 0..5 = 1, 5, 10, 50, 100, 1000 kHz */
-static uint8_t gAM_StepIndex = 2;   /* 默认 10k */
+/* Step index 0..4 = 1, 5, 10, 100, 1000 kHz，显示 1K 5K 10K 100K 1000K */
+static uint8_t gAM_StepIndex = 0;   /* 默认 1k */
 /* 长按 F 刚进入单边带时置位，松键清除；避免同一长按的后续 held 事件立刻触发“退回 AM” */
 static bool gFKeyJustEnteredSSB = false;
 /* 本次 F 键已触发长按，松键前不再触发短按；松键时清除 */
 static bool gFKeyLongPressDone = false;
-/* 本次 M 键已触发长按（切换 LNA/BW/STP 焦点），松键时不再触发 Key_MENU 短按逻辑 */
-static bool gMKeyLongPressHandled = false;
 
-static const uint16_t gAM_StepKHzTable[] = { 1, 5, 10, 50, 100, 1000 };
+static const uint16_t gAM_StepKHzTable[] = { 1, 5, 10, 100, 1000 };
 #define AM_STEP_COUNT ((unsigned)ARRAY_SIZE(gAM_StepKHzTable))
 
 uint16_t FM_GetAM_StepKHz(void)
@@ -80,12 +79,13 @@ uint16_t FM_GetAM_StepKHz(void)
 }
 
 uint8_t FM_GetAM_OptionFocus(void) { return gAM_OptionFocus; }
-uint8_t FM_GetAM_LNA_Index(void)   { return gAM_LNA_Index; }
+bool    FM_GetAM_AGC_On(void)      { return gAM_AGC_On; }
+uint8_t FM_GetAM_ATT_Index(void)   { return gAM_ATT_Index; }
 uint8_t FM_GetAM_BW_Index(void)   { return gAM_BW_Index; }
 uint8_t FM_GetAM_StepIndex(void)   { return gAM_StepIndex; }
 
 static void FM_ApplyAMOptions(void) {
-	SI47XX_SetAMLna(gAM_LNA_Index);
+	SI47XX_SetAMAgcAtt(gAM_AGC_On, gAM_ATT_Index);
 	SI47XX_SetAMBandwidth(gAM_BW_Index);
 }
 
@@ -681,14 +681,18 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 				/* 短按 * 修改当前焦点对应的子选项 */
 				switch (gAM_OptionFocus) {
 				case 0:
-					gAM_LNA_Index = (gAM_LNA_Index + 1) % 6;
-					SI47XX_SetAMLna(gAM_LNA_Index);
+					gAM_AGC_On = !gAM_AGC_On;
+					SI47XX_SetAMAgcAtt(gAM_AGC_On, gAM_ATT_Index);
 					break;
 				case 1:
+					gAM_ATT_Index = (gAM_ATT_Index + 1) % 5;
+					SI47XX_SetAMAgcAtt(gAM_AGC_On, gAM_ATT_Index);
+					break;
+				case 2:
 					gAM_BW_Index = (gAM_BW_Index + 1) % 7;
 					SI47XX_SetAMBandwidth(gAM_BW_Index);
 					break;
-				case 2:
+				case 3:
 					gAM_StepIndex = (gAM_StepIndex + 1) % AM_STEP_COUNT;
 					break;
 				}
@@ -702,23 +706,21 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 			break;
 		case KEY_MENU:
 #ifdef ENABLE_FM_SI4732
-			if (SI47XX_IsAMFamily() && bKeyHeld && !gMKeyLongPressHandled) {
-				/* 长按 M：仅首次 held 切换焦点，避免重复触发；置位后松键不触发 Key_MENU */
-				gAM_OptionFocus = (gAM_OptionFocus + 1) % 3;
-				gMKeyLongPressHandled = true;
-				gRequestDisplayScreen = DISPLAY_FM;
-				gUpdateStatus = true;
-				gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
-				break;
-			}
-			if (!bKeyPressed && gMKeyLongPressHandled) {
-				/* 松键：清除长按标志，不触发 Key_MENU */
-				gMKeyLongPressHandled = false;
-				break;
-			}
-			if (state == BUTTON_EVENT_SHORT && gMKeyLongPressHandled) {
-				gMKeyLongPressHandled = false;
-				break;
+			if (SI47XX_IsAMFamily()) {
+				/* 中短波下：短按 M 在 AGC/ATT/BW/STP 间切换，长按 M 无效 */
+				if (bKeyPressed && !bKeyHeld) {
+					gAM_OptionFocus = (gAM_OptionFocus + 1) % 4;
+					gRequestDisplayScreen = DISPLAY_FM;
+					gUpdateStatus = true;
+					gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
+					break;
+				}
+				if (bKeyHeld) {
+					break;
+				}
+				if (!bKeyPressed) {
+					break;
+				}
 			}
 #endif
 			Key_MENU(state);

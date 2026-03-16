@@ -318,14 +318,24 @@ void SI47XX_SetSeekAmLimits(uint16_t bottom, uint16_t top) {
   sendProperty(PROP_AM_SEEK_BAND_TOP, top);
 }
 
-/* LNA index: 0=AGC ON, 1=ATT 0, 2=ATT 1, 3=ATT 5, 4=ATT 15, 5=ATT 26 dB. AGCIDX 0=min att (max gain), 37≈max att. */
-static const uint8_t am_lna_agcidx[] = { 0, 0, 1, 5, 15, 26 };
+/* ATT index 0..4 -> 0, 1, 5, 15, 26 dB (AGCIDX 值). AGC ON 时由芯片自动，OFF 时用此表 */
+static const uint8_t am_att_agcidx[] = { 0, 1, 5, 15, 26 };
 
+void SI47XX_SetAMAgcAtt(bool agcOn, uint8_t attIndex) {
+  if (agcOn) {
+    SI47XX_SetAutomaticGainControl(0, 0);
+  } else {
+    if (attIndex > 4) attIndex = 4;
+    SI47XX_SetAutomaticGainControl(AGC_OVERRIDE_ARG1_DISABLE_AGC, am_att_agcidx[attIndex]);
+  }
+}
+
+/* 兼容旧 LNA 索引：0=AGC ON, 1..5=ATT 0,1,5,15,26 */
 void SI47XX_SetAMLna(uint8_t index) {
   if (index == 0) {
-    SI47XX_SetAutomaticGainControl(0, 0);
+    SI47XX_SetAMAgcAtt(true, 0);
   } else if (index <= 5) {
-    SI47XX_SetAutomaticGainControl(AGC_OVERRIDE_ARG1_DISABLE_AGC, am_lna_agcidx[index]);
+    SI47XX_SetAMAgcAtt(false, (uint8_t)(index - 1));
   }
 }
 
